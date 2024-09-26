@@ -1,0 +1,1431 @@
+#Prevalence---------
+summary(y1$follow_time)
+table(y1$Mort)
+table(y1$CVD_death)
+table(y1$IHD_death)
+table(y1$AMI_death)
+table(y1$CIHD_death)
+
+table(y1$Cere_death)
+table(y1$Stroke_death)
+table(y1$Resp_death)
+table(y1$Cancer_death)
+
+summary(y1$MVPA_week_sum)
+
+table(y1$MVPA_week_sum_150)
+summary(y1$pm25_mean)
+sd(y1$pm25_mean)
+
+sum(y1$MVPA_week_sum==150)
+#Baseline table---------
+variables_to_convert <- c("sex", "white","college","employment","smoke", "drinker",
+                          "Mort","Hypertension","Dislipidemia","DM_history","pm25_2",
+                          "solid_fuel","MVPA_week_sum_150")
+
+y1[variables_to_convert] <- lapply(y1[variables_to_convert], factor)
+t1 <- descrTable(pm25_2~age+sex+white+TDI+college+employment+BMI+smoke+drinker+
+                   +Hypertension+Dislipidemia+DM_history+
+                   MVPA_week_sum+MVPA_week_sum_150+pm25_mean+solid_fuel+exposure_tobacco_home, data = y1,digits = 2,
+                 method = c(MVPA_week_sum=2,exposure_tobacco_home=2),
+                 hide.no = "0",show.p.mul = TRUE,show.all = T)
+t1
+export2csv(t1, file='D:/Projects/UKB/2-PA-AP/Data/Table/table1_PM-acce.csv')
+
+t2 <- descrTable(MVPA_week_sum_150~age+sex+white+TDI+college+employment+BMI+smoke+drinker+
+                   +Hypertension+Dislipidemia+DM_history+
+                   MVPA_week_sum+pm25_mean+solid_fuel+exposure_tobacco_home, data = y1,digits = 2,
+                 method = c(MVPA_week_sum=2,exposure_tobacco_home=2),
+                 hide.no = "0",show.p.mul = TRUE,show.all = T)
+t2
+export2csv(t2, file='D:/Projects/UKB/2-PA-AP/Data/Table/table1_MVPA-acce.csv')
+
+
+
+#baseline-association-----------------
+library(ggExtra)
+
+# classic plot :
+p<-ggplot(data=y1, aes(x=pm25_mean, y=MVPA_week_sum),fill="#F47871") +
+  geom_point(color="#003472",shape=16) +
+  theme(legend.position="none")+
+  theme_bw()+labs(x="PM2.5 (ug/m3)",y="MVPA (min/week)")+
+  theme(axis.line = element_line(colour = "black"))
+
+# Set relative size of marginal plots (main plot 10x bigger than marginals)
+ggMarginal(p, type="histogram",fill = "#40a798", size=10)
+cor.test(y1$pm25_mean, y1$MVPA_week_sum,  method = "spearman")
+
+
+#AP-correlation--------------------
+library(corrplot)
+apcor <- subset(y1,select = c("pm25_mean","pm10_mean","no2_mean","nox_mean"))
+M=cor(apcor)
+corrplot.mixed(M,order='AOE')
+topptx(filename ="D:/Projects/UKB/2-PA-AP/Data/Fig/AP-correlation/Cor.pptx",width = 7, height = 7, units = "cm")
+
+#AP-RCS------------------
+quantile(y1$pm25_mean, probs = c(0.001, 0.999), na.rm = TRUE)
+summary(y1$pm25_mean)
+yx <- subset(y1,y1$pm25_mean>5 & y1$pm25_mean < 14.4)
+dt <- subset(yx, select = c(MVPA_week_sum,age,sex,pm25_2,pm25_3,pm25_4,
+                            follow_time,Mort,CVD_death,Resp_death,Cere_death,IHD_death,AMI_death,CIHD_death,
+                            pm25_mean,no2_mean,white,college,TDI,smoke,drinker,
+                            BMI,Hypertension,Dislipidemia,DM_history,
+                            solid_fuel,exposure_tobacco_home))
+dd <- datadist(dt) 
+options(datadist='dd') 
+##All-cause---------------
+fit<- cph(Surv(follow_time,Mort==1) ~ rcs(pm25_mean,3)+age+sex+white+college+TDI+smoke+
+            drinker+BMI+Hypertension+Dislipidemia+DM_history+solid_fuel+exposure_tobacco_home,data=dt) 
+anova(fit)
+HR<-Predict(fit, pm25_mean,fun=exp,ref.zero = TRUE)
+p1 <- ggplot(yx, aes(x = pm25_mean)) +
+  geom_line(data = HR, aes(pm25_mean,yhat), linetype = "solid", linewidth = 0.6, alpha = 1, color = "#003366") +
+  geom_ribbon(data = HR, aes(pm25_mean,ymin = lower, ymax = upper), alpha = 0.1, linewidth = 0.6,fill = "#003366") +
+  geom_hline(yintercept = 1, linetype = 2, linewidth = 0.6, color = "black") +
+  labs(title = "A. All-cause Mortality", x = "PM2.5 (ug/m3)", y = "Hazard Ratio") +
+  theme_half_open(11, rel_small = 1) +xlim(5,14)+scale_y_continuous(limits = c(0, 4), 
+                                                                      breaks = seq(0,4, 1), labels = scales::label_number(accuracy = 0.1))
+p2 <- ggplot(yx, aes(x = pm25_mean)) +
+  geom_histogram(aes(y=(..count..)*100/sum(..count..)),binwidth= 0.5,show.legend = FALSE,fill="#f9f7f7",color="gray80") +
+  scale_y_continuous(limits=c(0,20),breaks = seq(0,20,4),
+                     position = "right",name = "Percentage of population(%)")+
+  theme_half_open(11, rel_small = 1) +xlim(5,14) +theme(axis.line = element_line(color = "black"),
+                                                            panel.grid = element_blank(),panel.border = element_rect(colour = "black", fill=NA))+
+  rremove("x.axis")+
+  rremove("xlab") +
+  rremove("x.text") +
+  rremove("x.ticks") +
+  rremove("legend")
+
+aligned_plots <- align_plots(p2, p1, align="hv", axis="tblr")
+F1 <- ggdraw(aligned_plots[[1]]) + draw_plot(aligned_plots[[2]])
+
+##CVD---------------
+fit<- cph(Surv(follow_time,CVD_death==1) ~ rcs(pm25_mean,3)+age+sex+white+college+TDI+smoke+
+            drinker+BMI+Hypertension+Dislipidemia+DM_history+solid_fuel+exposure_tobacco_home,data=dt) 
+anova(fit)
+HR<-Predict(fit, pm25_mean,fun=exp,ref.zero = TRUE)
+p1 <- ggplot(yx, aes(x = pm25_mean)) +
+  geom_line(data = HR, aes(pm25_mean,yhat), linetype = "solid", linewidth = 0.6, alpha = 1, color = "#003366") +
+  geom_ribbon(data = HR, aes(pm25_mean,ymin = lower, ymax = upper), alpha = 0.1, linewidth = 0.6,fill = "#003366") +
+  geom_hline(yintercept = 1, linetype = 2, linewidth = 0.6, color = "black") +
+  labs(title = "B. CVD Mortality", x = "PM2.5 (ug/m3)", y = "Hazard Ratio") +
+  theme_half_open(11, rel_small = 1) +xlim(5,14)+scale_y_continuous(limits = c(0, 5), 
+                                                                    breaks = seq(0,5, 1), labels = scales::label_number(accuracy = 0.1))
+p2 <- ggplot(yx, aes(x = pm25_mean)) +
+  geom_histogram(aes(y=(..count..)*100/sum(..count..)),binwidth= 0.5,show.legend = FALSE,fill="#f9f7f7",color="gray80") +
+  scale_y_continuous(limits=c(0,20),breaks = seq(0,20,4),
+                     position = "right",name = "Percentage of population(%)")+
+  theme_half_open(11, rel_small = 1) +xlim(5,14) +theme(axis.line = element_line(color = "black"),
+                                                        panel.grid = element_blank(),panel.border = element_rect(colour = "black", fill=NA))+
+  rremove("x.axis")+
+  rremove("xlab") +
+  rremove("x.text") +
+  rremove("x.ticks") +
+  rremove("legend")
+
+aligned_plots <- align_plots(p2, p1, align="hv", axis="tblr")
+F2 <- ggdraw(aligned_plots[[1]]) + draw_plot(aligned_plots[[2]])
+
+##Cere---------------
+fit<- cph(Surv(follow_time,Cere_death==1) ~ rcs(pm25_mean,3)+age+sex+white+college+TDI+smoke+
+            drinker+BMI+Hypertension+Dislipidemia+DM_history+solid_fuel+exposure_tobacco_home,data=dt) 
+anova(fit)
+HR<-Predict(fit, pm25_mean,fun=exp,ref.zero = TRUE)
+p1 <- ggplot(yx, aes(x = pm25_mean)) +
+  geom_line(data = HR, aes(pm25_mean,yhat), linetype = "solid", linewidth = 0.6, alpha = 1, color = "#003366") +
+  geom_ribbon(data = HR, aes(pm25_mean,ymin = lower, ymax = upper), alpha = 0.1, linewidth = 0.6,fill = "#003366") +
+  geom_hline(yintercept = 1, linetype = 2, linewidth = 0.6, color = "black") +
+  labs(title = "C. Cerebrovascular Disease Mortality", x = "PM2.5 (ug/m3)", y = "Hazard Ratio") +
+  theme_half_open(11, rel_small = 1) +xlim(5,14)+scale_y_continuous(limits = c(0, 6), 
+                                                                    breaks = seq(0,6, 2), labels = scales::label_number(accuracy = 0.1))
+p2 <- ggplot(yx, aes(x = pm25_mean)) +
+  geom_histogram(aes(y=(..count..)*100/sum(..count..)),binwidth= 0.5,show.legend = FALSE,fill="#f9f7f7",color="gray80") +
+  scale_y_continuous(limits=c(0,20),breaks = seq(0,20,4),
+                     position = "right",name = "Percentage of population(%)")+
+  theme_half_open(11, rel_small = 1) +xlim(5,14) +theme(axis.line = element_line(color = "black"),
+                                                        panel.grid = element_blank(),panel.border = element_rect(colour = "black", fill=NA))+
+  rremove("x.axis")+
+  rremove("xlab") +
+  rremove("x.text") +
+  rremove("x.ticks") +
+  rremove("legend")
+
+aligned_plots <- align_plots(p2, p1, align="hv", axis="tblr")
+F3 <- ggdraw(aligned_plots[[1]]) + draw_plot(aligned_plots[[2]])
+
+##IHD---------------
+fit<- cph(Surv(follow_time,IHD_death==1) ~ rcs(pm25_mean,3)+age+sex+white+college+TDI+smoke+
+            drinker+BMI+Hypertension+Dislipidemia+DM_history+solid_fuel+exposure_tobacco_home,data=dt) 
+anova(fit)
+HR<-Predict(fit, pm25_mean,fun=exp,ref.zero = TRUE)
+p1 <- ggplot(yx, aes(x = pm25_mean)) +
+  geom_line(data = HR, aes(pm25_mean,yhat), linetype = "solid", linewidth = 0.6, alpha = 1, color = "#003366") +
+  geom_ribbon(data = HR, aes(pm25_mean,ymin = lower, ymax = upper), alpha = 0.1, linewidth = 0.6,fill = "#003366") +
+  geom_hline(yintercept = 1, linetype = 2, linewidth = 0.6, color = "black") +
+  labs(title = "D. IHD Mortality", x = "PM2.5 (ug/m3)", y = "Hazard Ratio") +
+  theme_half_open(11, rel_small = 1) +xlim(5,14)+scale_y_continuous(limits = c(0, 6), 
+                                                                    breaks = seq(0,6,1), labels = scales::label_number(accuracy = 0.1))
+p2 <- ggplot(yx, aes(x = pm25_mean)) +
+  geom_histogram(aes(y=(..count..)*100/sum(..count..)),binwidth= 0.5,show.legend = FALSE,fill="#f9f7f7",color="gray80") +
+  scale_y_continuous(limits=c(0,20),breaks = seq(0,20,4),
+                     position = "right",name = "Percentage of population(%)")+
+  theme_half_open(11, rel_small = 1) +xlim(5,14) +theme(axis.line = element_line(color = "black"),
+                                                        panel.grid = element_blank(),panel.border = element_rect(colour = "black", fill=NA))+
+  rremove("x.axis")+
+  rremove("xlab") +
+  rremove("x.text") +
+  rremove("x.ticks") +
+  rremove("legend")
+
+aligned_plots <- align_plots(p2, p1, align="hv", axis="tblr")
+F4 <- ggdraw(aligned_plots[[1]]) + draw_plot(aligned_plots[[2]])
+
+##AMI---------------
+fit<- cph(Surv(follow_time,AMI_death==1) ~ rcs(pm25_mean,3)+age+sex+white+college+TDI+smoke+
+            drinker+BMI+Hypertension+Dislipidemia+DM_history+solid_fuel+exposure_tobacco_home,data=dt) 
+anova(fit)
+HR<-Predict(fit, pm25_mean,fun=exp,ref.zero = TRUE)
+p1 <- ggplot(yx, aes(x = pm25_mean)) +
+  geom_line(data = HR, aes(pm25_mean,yhat), linetype = "solid", linewidth = 0.6, alpha = 1, color = "#003366") +
+  geom_ribbon(data = HR, aes(pm25_mean,ymin = lower, ymax = upper), alpha = 0.1, linewidth = 0.6,fill = "#003366") +
+  geom_hline(yintercept = 1, linetype = 2, linewidth = 0.6, color = "black") +
+  labs(title = "E. AMI Mortality", x = "PM2.5 (ug/m3)", y = "Hazard Ratio") +
+  theme_half_open(11, rel_small = 1) +xlim(5,14)+scale_y_continuous(limits = c(0, 20), 
+                                                                    breaks = seq(0,20,5), labels = scales::label_number(accuracy = 0.1))
+p2 <- ggplot(yx, aes(x = pm25_mean)) +
+  geom_histogram(aes(y=(..count..)*100/sum(..count..)),binwidth= 0.5,show.legend = FALSE,fill="#f9f7f7",color="gray80") +
+  scale_y_continuous(limits=c(0,20),breaks = seq(0,20,4),
+                     position = "right",name = "Percentage of population(%)")+
+  theme_half_open(11, rel_small = 1) +xlim(5,14) +theme(axis.line = element_line(color = "black"),
+                                                        panel.grid = element_blank(),panel.border = element_rect(colour = "black", fill=NA))+
+  rremove("x.axis")+
+  rremove("xlab") +
+  rremove("x.text") +
+  rremove("x.ticks") +
+  rremove("legend")
+
+aligned_plots <- align_plots(p2, p1, align="hv", axis="tblr")
+F5 <- ggdraw(aligned_plots[[1]]) + draw_plot(aligned_plots[[2]])
+
+
+##CIHD---------------
+fit<- cph(Surv(follow_time,CIHD_death==1) ~ rcs(pm25_mean,3)+age+sex+white+college+TDI+smoke+
+            drinker+BMI+Hypertension+Dislipidemia+DM_history+solid_fuel+exposure_tobacco_home,data=dt) 
+anova(fit)
+HR<-Predict(fit, pm25_mean,fun=exp,ref.zero = TRUE)
+p1 <- ggplot(yx, aes(x = pm25_mean)) +
+  geom_line(data = HR, aes(pm25_mean,yhat), linetype = "solid", linewidth = 0.6, alpha = 1, color = "#003366") +
+  geom_ribbon(data = HR, aes(pm25_mean,ymin = lower, ymax = upper), alpha = 0.1, linewidth = 0.6,fill = "#003366") +
+  geom_hline(yintercept = 1, linetype = 2, linewidth = 0.6, color = "black") +
+  labs(title = "F. CIHD Mortality", x = "PM2.5 (ug/m3)", y = "Hazard Ratio") +
+  theme_half_open(11, rel_small = 1) +xlim(5,14)+scale_y_continuous(limits = c(0, 4), 
+                                                                    breaks = seq(0,4,1), labels = scales::label_number(accuracy = 0.1))
+p2 <- ggplot(yx, aes(x = pm25_mean)) +
+  geom_histogram(aes(y=(..count..)*100/sum(..count..)),binwidth= 0.5,show.legend = FALSE,fill="#f9f7f7",color="gray80") +
+  scale_y_continuous(limits=c(0,20),breaks = seq(0,20,4),
+                     position = "right",name = "Percentage of population(%)")+
+  theme_half_open(11, rel_small = 1) +xlim(5,14) +theme(axis.line = element_line(color = "black"),
+                                                        panel.grid = element_blank(),panel.border = element_rect(colour = "black", fill=NA))+
+  rremove("x.axis")+
+  rremove("xlab") +
+  rremove("x.text") +
+  rremove("x.ticks") +
+  rremove("legend")
+
+aligned_plots <- align_plots(p2, p1, align="hv", axis="tblr")
+F6 <- ggdraw(aligned_plots[[1]]) + draw_plot(aligned_plots[[2]])
+
+F1+F2+F3+F4+F5+F6+plot_layout(ncol = 2)
+
+topptx(filename ="D:/Projects/UKB/2-PA-AP/Data/Fig/RCS/AP/pm25.pptx",width = 8.5, height = 12,  units = "cm")
+
+
+##AP-Cox-----------------
+coxph(Surv(follow_time,Mort==1) ~ pm25_IQR,data=y1)|>reportReg()
+coxph(Surv(follow_time,CVD_death==1) ~ pm25_IQR,data=y1)|>reportReg()
+coxph(Surv(follow_time,Cere_death==1) ~ pm25_IQR,data=y1)|>reportReg()
+coxph(Surv(follow_time,IHD_death==1) ~ pm25_IQR,data=y1)|>reportReg()
+coxph(Surv(follow_time,AMI_death==1) ~ pm25_IQR,data=y1)|>reportReg()
+coxph(Surv(follow_time,CIHD_death==1) ~ pm25_IQR,data=y1)|>reportReg()
+
+
+coxph(Surv(follow_time,Mort==1) ~ pm25_IQR+age+sex+white+college+TDI+smoke+
+        drinker+BMI+Hypertension+Dislipidemia+DM_history+solid_fuel+exposure_tobacco_home,data=y1)|>reportReg()
+coxph(Surv(follow_time,CVD_death==1) ~ pm25_IQR+age+sex+white+college+TDI+smoke+
+        drinker+BMI+Hypertension+Dislipidemia+DM_history+solid_fuel+exposure_tobacco_home,data=y1)|>reportReg()
+coxph(Surv(follow_time,Cere_death==1) ~ pm25_IQR+age+sex+white+college+TDI+smoke+
+        drinker+BMI+Hypertension+Dislipidemia+DM_history+solid_fuel+exposure_tobacco_home,data=y1)|>reportReg()
+coxph(Surv(follow_time,IHD_death==1) ~ pm25_IQR+age+sex+white+college+TDI+smoke+
+        drinker+BMI+Hypertension+Dislipidemia+DM_history+solid_fuel+exposure_tobacco_home,data=y1)|>reportReg()
+coxph(Surv(follow_time,AMI_death==1) ~ pm25_IQR+age+sex+white+college+TDI+smoke+
+        drinker+BMI+Hypertension+Dislipidemia+DM_history+solid_fuel+exposure_tobacco_home,data=y1)|>reportReg()
+coxph(Surv(follow_time,CIHD_death==1) ~ pm25_IQR+age+sex+white+college+TDI+smoke+
+        drinker+BMI+Hypertension+Dislipidemia+DM_history+solid_fuel+exposure_tobacco_home,data=y1)|>reportReg()
+
+
+coxph(Surv(follow_time,AMI_death==1) ~ pm25_IQR+age+sex+white+college+TDI+smoke+
+        drinker+BMI+Hypertension+Dislipidemia+DM_history+solid_fuel+exposure_tobacco_home,data=subset(y1, pm25_mean >10))|>reportReg()
+
+#multi-AP------
+coxph(Surv(follow_time,Mort==1) ~ pm25_IQR+nox_IQR+age+sex+white+college+TDI+smoke+
+        drinker+BMI+Hypertension+Dislipidemia+DM_history+solid_fuel+exposure_tobacco_home,data=y1)|>reportReg()
+
+#PA-RCS------------------
+quantile(y1$MVPA_week_sum, probs = c(0.001, 0.999), na.rm = TRUE)
+yx <- subset(y1, y1$MVPA_week_sum>=0 & y1$MVPA_week_sum < 1200)
+dt <- subset(yx, select = c(MVPA_week_sum,age,sex,pm25_2,pm25_3,pm25_4,
+                            follow_time,Mort,CVD_death,Resp_death,Cere_death,IHD_death,AMI_death,CIHD_death,
+                            pm25_mean,no2_mean,white,college,TDI,smoke,drinker,
+                            BMI,Hypertension,Dislipidemia,DM_history,
+                            solid_fuel,exposure_tobacco_home))
+dd <- datadist(dt) 
+options(datadist='dd') 
+
+##All-cause---------------
+fit<- cph(Surv(follow_time,Mort==1) ~ rcs(MVPA_week_sum,3)+age+sex+white+college+TDI+smoke+
+            drinker+BMI+Hypertension+Dislipidemia+DM_history,data=dt) 
+dd$limits$MVPA_week_sum[2] <- 400
+fit=update(fit)
+
+anova(fit)
+HR<-Predict(fit, MVPA_week_sum,fun=exp,ref.zero = TRUE)
+p1 <- ggplot(yx, aes(x = MVPA_week_sum)) +
+  geom_line(data = HR, aes(MVPA_week_sum,yhat), linetype = "solid", linewidth = 0.6, alpha = 1, color = "#631879ff") +
+  geom_ribbon(data = HR, aes(MVPA_week_sum,ymin = lower, ymax = upper), alpha = 0.1, linewidth = 0.6,fill = "#631879ff") +
+  geom_hline(yintercept = 1, linetype = 2, linewidth = 0.6, color = "black") +
+  geom_vline(xintercept = 400, linetype = 2, linewidth = 0.6, color = "red") +
+  labs(title = "A. All-cause Mortality", x = "MVPA (min/week)", y = "Hazard Ratio") +
+  theme_half_open(11, rel_small = 1) +xlim(0,1116)+scale_y_continuous(limits = c(0, 3), 
+                                                                      breaks = seq(0,3, 0.5), labels = scales::label_number(accuracy = 0.1))
+p2 <- ggplot(yx, aes(x = MVPA_week_sum)) +
+  geom_histogram(aes(y=(..count..)*100/sum(..count..)),binwidth= 50,show.legend = FALSE,fill="#f9f7f7",color="gray80") +
+  scale_y_continuous(limits=c(0,16),breaks = seq(0,16,4),
+                     position = "right",name = "Percentage of population(%)")+
+  theme_half_open(11, rel_small = 1) +xlim(10,1116)+  theme(axis.line = element_line(color = "black"),
+                                                            panel.grid = element_blank(),panel.border = element_rect(colour = "black", fill=NA))+
+  rremove("x.axis")+
+  rremove("xlab") +
+  rremove("x.text") +
+  rremove("x.ticks") +
+  rremove("legend")
+
+aligned_plots <- align_plots(p2, p1, align="hv", axis="tblr")
+M1 <- ggdraw(aligned_plots[[1]]) + draw_plot(aligned_plots[[2]])
+
+
+##CVD---------------
+fit<- cph(Surv(follow_time,CVD_death==1) ~ rcs(MVPA_week_sum,3)+age+sex+white+college+TDI+smoke+
+            drinker+BMI+Hypertension+Dislipidemia+DM_history,data=dt) 
+dd$limits$MVPA_week_sum[2] <- 400  
+fit=update(fit)
+
+anova(fit)
+HR<-Predict(fit, MVPA_week_sum,fun=exp,ref.zero = TRUE)
+p1 <- ggplot(yx, aes(x = MVPA_week_sum)) +
+  geom_line(data = HR, aes(MVPA_week_sum,yhat), linetype = "solid", linewidth = 0.6, alpha = 1, color = "#631879ff") +
+  geom_ribbon(data = HR, aes(MVPA_week_sum,ymin = lower, ymax = upper), alpha = 0.1, linewidth = 0.6,fill = "#631879ff") +
+  geom_hline(yintercept = 1, linetype = 2, linewidth = 0.6, color = "black") +
+  geom_vline(xintercept = 400, linetype = 2, linewidth = 0.6, color = "red") +
+  labs(title = "B. CVD Mortality", x = "MVPA (min/week)", y = "Hazard Ratio") +
+  theme_half_open(11, rel_small = 1) +xlim(0,1116)+scale_y_continuous(limits = c(0, 3), 
+                                                                      breaks = seq(0,3, 0.5), labels = scales::label_number(accuracy = 0.1))
+p2 <- ggplot(yx, aes(x = MVPA_week_sum)) +
+  geom_histogram(aes(y=(..count..)*100/sum(..count..)),binwidth= 50,show.legend = FALSE,fill="#f9f7f7",color="gray80") +
+  scale_y_continuous(limits=c(0,16),breaks = seq(0,16,4),
+                     position = "right",name = "Percentage of population(%)")+
+  theme_half_open(11, rel_small = 1) +xlim(10,1116)+  theme(axis.line = element_line(color = "black"),
+                                                            panel.grid = element_blank(),panel.border = element_rect(colour = "black", fill=NA))+
+  rremove("x.axis")+
+  rremove("xlab") +
+  rremove("x.text") +
+  rremove("x.ticks") +
+  rremove("legend")
+
+aligned_plots <- align_plots(p2, p1, align="hv", axis="tblr")
+M2 <- ggdraw(aligned_plots[[1]]) + draw_plot(aligned_plots[[2]])
+
+##Cere---------------
+fit<- cph(Surv(follow_time,Cere_death==1) ~ rcs(MVPA_week_sum,3)+age+sex+white+college+TDI+smoke+
+            drinker+BMI+Hypertension+Dislipidemia+DM_history,data=dt) 
+dd$limits$MVPA_week_sum[2] <- 400 
+fit=update(fit)
+
+anova(fit)
+HR<-Predict(fit, MVPA_week_sum,fun=exp,ref.zero = TRUE)
+p1 <- ggplot(yx, aes(x = MVPA_week_sum)) +
+  geom_line(data = HR, aes(MVPA_week_sum,yhat), linetype = "solid", linewidth = 0.6, alpha = 1, color = "#631879ff") +
+  geom_ribbon(data = HR, aes(MVPA_week_sum,ymin = lower, ymax = upper), alpha = 0.1, linewidth = 0.6,fill = "#631879ff") +
+  geom_hline(yintercept = 1, linetype = 2, linewidth = 0.6, color = "black") +
+  labs(title = "C. Cerebrovascular Disease Mortality", x = "MVPA (min/week)", y = "Hazard Ratio") +
+  theme_half_open(11, rel_small = 1) +xlim(0,1116)+scale_y_continuous(limits = c(0, 4), 
+                                                                      breaks = seq(0,4, 1), labels = scales::label_number(accuracy = 0.1))
+p2 <- ggplot(yx, aes(x = MVPA_week_sum)) +
+  geom_histogram(aes(y=(..count..)*100/sum(..count..)),binwidth= 50,show.legend = FALSE,fill="#f9f7f7",color="gray80") +
+  scale_y_continuous(limits=c(0,16),breaks = seq(0,16,4),
+                     position = "right",name = "Percentage of population(%)")+
+  theme_half_open(11, rel_small = 1) +xlim(10,1116)+  theme(axis.line = element_line(color = "black"),
+                                                            panel.grid = element_blank(),panel.border = element_rect(colour = "black", fill=NA))+
+  rremove("x.axis")+
+  rremove("xlab") +
+  rremove("x.text") +
+  rremove("x.ticks") +
+  rremove("legend")
+
+aligned_plots <- align_plots(p2, p1, align="hv", axis="tblr")
+M3 <- ggdraw(aligned_plots[[1]]) + draw_plot(aligned_plots[[2]])
+
+##IHD---------------
+fit<- cph(Surv(follow_time,IHD_death==1) ~ rcs(MVPA_week_sum,3)+age+sex+white+college+TDI+smoke+
+            drinker+BMI+Hypertension+Dislipidemia+DM_history,data=dt) 
+dd$limits$MVPA_week_sum[2] <- 400  
+fit=update(fit)
+
+anova(fit)
+HR<-Predict(fit, MVPA_week_sum,fun=exp,ref.zero = TRUE)
+p1 <- ggplot(yx, aes(x = MVPA_week_sum)) +
+  geom_line(data = HR, aes(MVPA_week_sum,yhat), linetype = "solid", linewidth = 0.6, alpha = 1, color = "#631879ff") +
+  geom_ribbon(data = HR, aes(MVPA_week_sum,ymin = lower, ymax = upper), alpha = 0.1, linewidth = 0.6,fill = "#631879ff") +
+  geom_hline(yintercept = 1, linetype = 2, linewidth = 0.6, color = "black") +
+  labs(title = "D. IHD Mortality", x = "MVPA (min/week)", y = "Hazard Ratio") +
+  theme_half_open(11, rel_small = 1) +xlim(0,1116)+scale_y_continuous(limits = c(0, 3), 
+                                                                      breaks = seq(0,3, 0.5), labels = scales::label_number(accuracy = 0.1))
+p2 <- ggplot(yx, aes(x = MVPA_week_sum)) +
+  geom_histogram(aes(y=(..count..)*100/sum(..count..)),binwidth= 50,show.legend = FALSE,fill="#f9f7f7",color="gray80") +
+  scale_y_continuous(limits=c(0,16),breaks = seq(0,16,4),
+                     position = "right",name = "Percentage of population(%)")+
+  theme_half_open(11, rel_small = 1) +xlim(10,1116)+  theme(axis.line = element_line(color = "black"),
+                                                            panel.grid = element_blank(),panel.border = element_rect(colour = "black", fill=NA))+
+  rremove("x.axis")+
+  rremove("xlab") +
+  rremove("x.text") +
+  rremove("x.ticks") +
+  rremove("legend")
+
+aligned_plots <- align_plots(p2, p1, align="hv", axis="tblr")
+M4 <- ggdraw(aligned_plots[[1]]) + draw_plot(aligned_plots[[2]])
+
+##AMI---------------
+fit<- cph(Surv(follow_time,AMI_death==1) ~ rcs(MVPA_week_sum,3)+age+sex+white+college+TDI+smoke+
+            drinker+BMI+Hypertension+Dislipidemia+DM_history,data=dt) 
+dd$limits$MVPA_week_sum[2] <- 400  
+fit=update(fit)
+
+anova(fit)
+HR<-Predict(fit, MVPA_week_sum,fun=exp,ref.zero = TRUE)
+p1 <- ggplot(yx, aes(x = MVPA_week_sum)) +
+  geom_line(data = HR, aes(MVPA_week_sum,yhat), linetype = "solid", linewidth = 0.6, alpha = 1, color = "#631879ff") +
+  geom_ribbon(data = HR, aes(MVPA_week_sum,ymin = lower, ymax = upper), alpha = 0.1, linewidth = 0.6,fill = "#631879ff") +
+  geom_hline(yintercept = 1, linetype = 2, linewidth = 0.6, color = "black") +
+  labs(title = "E. AMI Mortality", x = "MVPA (min/week)", y = "Hazard Ratio") +
+  theme_half_open(11, rel_small = 1) +xlim(0,1116)+scale_y_continuous(limits = c(0, 4), 
+                                                                      breaks = seq(0,4, 1), labels = scales::label_number(accuracy = 0.1))
+p2 <- ggplot(yx, aes(x = MVPA_week_sum)) +
+  geom_histogram(aes(y=(..count..)*100/sum(..count..)),binwidth= 50,show.legend = FALSE,fill="#f9f7f7",color="gray80") +
+  scale_y_continuous(limits=c(0,16),breaks = seq(0,16,4),
+                     position = "right",name = "Percentage of population(%)")+
+  theme_half_open(11, rel_small = 1) +xlim(10,1116)+  theme(axis.line = element_line(color = "black"),
+                                                            panel.grid = element_blank(),panel.border = element_rect(colour = "black", fill=NA))+
+  rremove("x.axis")+
+  rremove("xlab") +
+  rremove("x.text") +
+  rremove("x.ticks") +
+  rremove("legend")
+
+aligned_plots <- align_plots(p2, p1, align="hv", axis="tblr")
+M5 <- ggdraw(aligned_plots[[1]]) + draw_plot(aligned_plots[[2]])
+
+##CIHD---------------
+fit<- cph(Surv(follow_time,CIHD_death==1) ~ rcs(MVPA_week_sum,3)+age+sex+white+college+TDI+smoke+
+            drinker+BMI+Hypertension+Dislipidemia+DM_history,data=dt) 
+dd$limits$MVPA_week_sum[2] <- 400 
+fit=update(fit)
+anova(fit)
+HR<-Predict(fit, MVPA_week_sum,fun=exp,ref.zero = TRUE)
+p1 <- ggplot(yx, aes(x = MVPA_week_sum)) +
+  geom_line(data = HR, aes(MVPA_week_sum,yhat), linetype = "solid", linewidth = 0.6, alpha = 1, color = "#631879ff") +
+  geom_ribbon(data = HR, aes(MVPA_week_sum,ymin = lower, ymax = upper), alpha = 0.1, linewidth = 0.6,fill = "#631879ff") +
+  geom_hline(yintercept = 1, linetype = 2, linewidth = 0.6, color = "black") +
+  labs(title = "F. CIHD Mortality", x = "MVPA (min/week)", y = "Hazard Ratio") +
+  theme_half_open(11, rel_small = 1) +xlim(0,1116)+scale_y_continuous(limits = c(0, 3), 
+                                                                      breaks = seq(0,3, 0.5), labels = scales::label_number(accuracy = 0.1))
+p2 <- ggplot(yx, aes(x = MVPA_week_sum)) +
+  geom_histogram(aes(y=(..count..)*100/sum(..count..)),binwidth= 50,show.legend = FALSE,fill="#f9f7f7",color="gray80") +
+  scale_y_continuous(limits=c(0,16),breaks = seq(0,16,4),
+                     position = "right",name = "Percentage of population(%)")+
+  theme_half_open(11, rel_small = 1) +xlim(10,1116)+  theme(axis.line = element_line(color = "black"),
+                                                            panel.grid = element_blank(),panel.border = element_rect(colour = "black", fill=NA))+
+  rremove("x.axis")+
+  rremove("xlab") +
+  rremove("x.text") +
+  rremove("x.ticks") +
+  rremove("legend")
+
+aligned_plots <- align_plots(p2, p1, align="hv", axis="tblr")
+M6 <- ggdraw(aligned_plots[[1]]) + draw_plot(aligned_plots[[2]])
+
+M1+M2+M3+M4+M5+M6+plot_layout(ncol = 2)
+
+topptx(filename ="D:/Projects/UKB/2-PA-AP/Data/Fig/RCS/MVPA.pptx",width = 8.5, height = 12,  units = "cm")
+
+##PA-Cox----------------
+coxph(Surv(follow_time,Mort==1) ~ MVPA_week_sum_100,data=y1)|>reportReg()
+coxph(Surv(follow_time,CVD_death==1) ~ MVPA_week_sum_100,data=y1)|>reportReg()
+coxph(Surv(follow_time,Cere_death==1) ~ MVPA_week_sum_100,data=y1)|>reportReg()
+coxph(Surv(follow_time,IHD_death==1) ~ MVPA_week_sum_100,data=y1)|>reportReg()
+coxph(Surv(follow_time,AMI_death==1) ~ MVPA_week_sum_100,data=y1)|>reportReg()
+coxph(Surv(follow_time,CIHD_death==1) ~ MVPA_week_sum_100,data=y1)|>reportReg()
+
+
+coxph(Surv(follow_time,Mort==1) ~ MVPA_week_sum_100+age+sex+white+college+TDI+smoke+
+        drinker+BMI+Hypertension+Dislipidemia+DM_history,data=y1)|>reportReg()
+coxph(Surv(follow_time,CVD_death==1) ~ MVPA_week_sum_100+age+sex+white+college+TDI+smoke+
+        drinker+BMI+Hypertension+Dislipidemia+DM_history,data=y1)|>reportReg()
+coxph(Surv(follow_time,Cere_death==1) ~ MVPA_week_sum_100+age+sex+white+college+TDI+smoke+
+        drinker+BMI+Hypertension+Dislipidemia+DM_history,data=y1)|>reportReg()
+coxph(Surv(follow_time,IHD_death==1) ~ MVPA_week_sum_100+age+sex+white+college+TDI+smoke+
+        drinker+BMI+Hypertension+Dislipidemia+DM_history,data=y1)|>reportReg()
+coxph(Surv(follow_time,AMI_death==1) ~ MVPA_week_sum_100+age+sex+white+college+TDI+smoke+
+        drinker+BMI+Hypertension+Dislipidemia+DM_history,data=y1)|>reportReg()
+coxph(Surv(follow_time,CIHD_death==1) ~ MVPA_week_sum_100+age+sex+white+college+TDI+smoke+
+        drinker+BMI+Hypertension+Dislipidemia+DM_history,data=y1)|>reportReg()
+
+
+coxph(Surv(follow_time,Mort==1) ~ MVPA_week_sum_150,data=y1)|>reportReg()
+coxph(Surv(follow_time,CVD_death==1) ~ MVPA_week_sum_150,data=y1)|>reportReg()
+coxph(Surv(follow_time,Cere_death==1) ~ MVPA_week_sum_150,data=y1)|>reportReg()
+coxph(Surv(follow_time,IHD_death==1) ~ MVPA_week_sum_150,data=y1)|>reportReg()
+coxph(Surv(follow_time,AMI_death==1) ~ MVPA_week_sum_150,data=y1)|>reportReg()
+coxph(Surv(follow_time,CIHD_death==1) ~ MVPA_week_sum_150,data=y1)|>reportReg()
+
+coxph(Surv(follow_time,Mort==1) ~ MVPA_week_sum_150+age+sex+white+college+TDI+smoke+
+        drinker+BMI+Hypertension+Dislipidemia+DM_history,data=y1)|>reportReg()
+coxph(Surv(follow_time,CVD_death==1) ~ MVPA_week_sum_150+age+sex+white+college+TDI+smoke+
+        drinker+BMI+Hypertension+Dislipidemia+DM_history,data=y1)|>reportReg()
+coxph(Surv(follow_time,Cere_death==1) ~ MVPA_week_sum_150+age+sex+white+college+TDI+smoke+
+        drinker+BMI+Hypertension+Dislipidemia+DM_history,data=y1)|>reportReg()
+
+coxph(Surv(follow_time,IHD_death==1) ~ MVPA_week_sum_150+age+sex+white+college+TDI+smoke+
+        drinker+BMI+Hypertension+Dislipidemia+DM_history,data=y1)|>reportReg()
+coxph(Surv(follow_time,AMI_death==1) ~ MVPA_week_sum_150+age+sex+white+college+TDI+smoke+
+        drinker+BMI+Hypertension+Dislipidemia+DM_history,data=y1)|>reportReg()
+coxph(Surv(follow_time,CIHD_death==1) ~ MVPA_week_sum_150+age+sex+white+college+TDI+smoke+
+        drinker+BMI+Hypertension+Dislipidemia+DM_history,data=y1)|>reportReg()
+
+coxph(Surv(follow_time,Mort==1) ~ MVPA_week_sum_100+age+sex+white+college+TDI+smoke+
+        drinker+BMI+Hypertension+Dislipidemia+DM_history,data=subset(y1,MVPA_week_sum <= 400))|>reportReg()
+coxph(Surv(follow_time,CVD_death==1) ~ MVPA_week_sum_100+age+sex+white+college+TDI+smoke+
+        drinker+BMI+Hypertension+Dislipidemia+DM_history,data=subset(y1,MVPA_week_sum <= 400))|>reportReg()
+
+
+#Interaction-RCS-------------------------
+##PM2.5--------------
+fit<-cph(Surv(follow_time,Mort==1) ~ pm25_IQR*rcs(MVPA_week_sum,3)+age+sex+white+college+TDI+smoke+
+           drinker+BMI+Hypertension+Dislipidemia+DM_history+solid_fuel+
+           exposure_tobacco_home,x=TRUE, y=TRUE,data=y1)
+summary(y1$MVPA_week_sum)
+quantile(y1$MVPA_week_sum, probs = c(0.01, 0.99), na.rm = TRUE)
+HR<- intEST(var2values = c(0:1116),model = fit,data = y1,var1 = "pm25_IQR",var2 = "MVPA_week_sum",ci.method = "delta")
+plotINT(HR,xlab = "MVPA_week_sum")
+
+p1 <- ggplot(y1, aes(x = MVPA_week_sum)) +
+  geom_histogram(aes(y=(..count..)*100/sum(..count..)),binwidth= 50,show.legend = FALSE,fill="gray90",color="gray80") +
+  scale_y_continuous(limits=c(0,16),breaks = seq(0,16,4),
+                     position = "right",name = "Percentage of population(%)")+
+  theme_half_open(11, rel_small = 1) +xlim(0,1116)+  theme(axis.line = element_line(color = "black"),
+                                                             panel.grid = element_blank(),panel.border = element_rect(colour = "black", fill=NA))+
+  rremove("x.axis")+
+  rremove("xlab") +
+  rremove("x.text") +
+  rremove("x.ticks") +
+  rremove("legend")
+
+p2 <- ggplot(y1, aes(x = MVPA_week_sum)) +
+  geom_line(data = HR, aes(Value, HR), linetype = "solid", linewidth = 0.6, alpha = 1, color = "#631879ff") +
+  geom_ribbon(data = HR, aes(Value, ymin = CI_L, ymax = CI_U), alpha = 0.1, linewidth = 0.6,color = "#631879ff",fill = "transparent",linetype = "dashed") +
+  geom_hline(yintercept = 1, linetype = 2, linewidth = 0.6, color = "black") +
+  labs(title = "A. All-cause Mortality", x = "MVPA (min/week)", y = "HR for each interquartile range increase in PM2.5") +
+  theme_half_open(11, rel_small = 1) +xlim(0,1116)+scale_y_continuous(limits = c(0.5, 3), 
+                                                                      breaks = seq(0.5, 3, 0.5))
+
+
+aligned_plots <- align_plots(p1, p2, align="hv", axis="tblr")
+I1 <- ggdraw(aligned_plots[[1]]) + draw_plot(aligned_plots[[2]])
+
+
+coxph(Surv(follow_time,Mort==1) ~ pm25_IQR+age+sex+white+college+TDI+smoke+
+        drinker+BMI+Hypertension+Dislipidemia+DM_history+solid_fuel+
+        exposure_tobacco_home,data=subset(y1,MVPA_week_sum >= 400)) |> reportReg()
+
+
+fit1<-cph(Surv(follow_time,CVD_death==1) ~ pm25_IQR*rcs(MVPA_week_sum,3)+age+sex+white+college+TDI+smoke+
+           drinker+BMI+Hypertension+Dislipidemia+DM_history+solid_fuel+
+           exposure_tobacco_home,x=TRUE, y=TRUE,data=y1)
+HR<- intEST(var2values = c(0:1116),model = fit1,data = y1,var1 = "pm25_IQR",var2 = "MVPA_week_sum",ci.method = "delta")
+plotINT(HR,xlab = "MVPA_week_sum")
+
+p2 <- ggplot(y1, aes(x = MVPA_week_sum)) +
+  geom_line(data = HR, aes(Value, HR), linetype = "solid", linewidth = 0.6, alpha = 1, color = "#631879ff") +
+  geom_ribbon(data = HR, aes(Value, ymin = CI_L, ymax = CI_U), alpha = 0.1, linewidth = 0.6,color = "#631879ff",fill = "transparent",linetype = "dashed") +
+  geom_hline(yintercept = 1, linetype = 2, linewidth = 0.6, color = "black") +
+  geom_hline(yintercept = 2.189734, linetype = 2, linewidth = 0.6, color = "red") +
+  labs(title = "B. CVD Mortality", x = "MVPA (min/week)", y = "HR for each interquartile range increase in PM2.5") +
+  theme_half_open(11, rel_small = 1)+xlim(0,1116)+scale_y_continuous(limits = c(0.5,5.5),breaks = seq(0.5, 5.5, 1))
+aligned_plots <- align_plots(p1, p2, align="hv", axis="tblr")
+I2 <- ggdraw(aligned_plots[[1]]) + draw_plot(aligned_plots[[2]])
+
+
+y1$DM_history <- as.factor(y1$DM_history)
+coxph(Surv(follow_time,CVD_death==1) ~ pm25_IQR+age+sex+white+college+TDI+smoke+
+        drinker+BMI+Hypertension+Dislipidemia+DM_history+solid_fuel+
+        exposure_tobacco_home,data=subset(y1,MVPA_week_sum>=700)) |> reportReg()
+
+fit3<-cph(Surv(follow_time,Cere_death==1) ~ pm25_IQR*rcs(MVPA_week_sum,3)+age+sex+white+college+TDI+smoke+
+            drinker+BMI+Hypertension+Dislipidemia+DM_history+solid_fuel+
+            exposure_tobacco_home,x=TRUE, y=TRUE,data=y1)
+HR<- intEST(var2values = c(0:1116),model = fit3,data = y1,var1 = "pm25_IQR",var2 = "MVPA_week_sum",ci.method = "delta")
+plotINT(HR,xlab = "MVPA_week_sum")
+p2 <- ggplot(y1, aes(x = MVPA_week_sum)) +
+  geom_line(data = HR, aes(Value, HR), linetype = "solid", linewidth = 0.6, alpha = 1, color = "#631879ff") +
+  geom_ribbon(data = HR, aes(Value, ymin = CI_L, ymax = CI_U), alpha = 0.1, linewidth = 0.6,color = "#631879ff",fill = "transparent",linetype = "dashed") +
+  geom_hline(yintercept = 1, linetype = 2, linewidth = 0.6, color = "black") +
+  labs(title = "C. Cerebrovascular Disease Mortality", x = "MVPA (min/week)", y = "HR for each interquartile range increase in PM2.5") +
+  theme_half_open(11, rel_small = 1) +xlim(0,1116)+scale_y_continuous(limits = c(0,5), 
+                                                                      breaks = seq(0, 5, 1),labels = scales::label_number(accuracy = 0.1))
+aligned_plots <- align_plots(p1, p2, align="hv", axis="tblr")
+I3 <- ggdraw(aligned_plots[[1]]) + draw_plot(aligned_plots[[2]])
+
+
+fit2<-cph(Surv(follow_time,IHD_death==1) ~ pm25_IQR*rcs(MVPA_week_sum,3)+age+sex+white+college+TDI+smoke+
+            drinker+BMI+Hypertension+Dislipidemia+DM_history+solid_fuel+
+            exposure_tobacco_home,x=TRUE, y=TRUE,data=y1)
+HR<- intEST(var2values = c(0:1116),model = fit2,data = y1,var1 = "pm25_IQR",var2 = "MVPA_week_sum",ci.method = "delta")
+plotINT(HR,xlab = "MVPA_week_sum")
+
+p2 <- ggplot(y1, aes(x = MVPA_week_sum)) +
+  geom_line(data = HR, aes(Value, HR), linetype = "solid", linewidth = 0.6, alpha = 1, color = "#631879ff") +
+  geom_ribbon(data = HR, aes(Value, ymin = CI_L, ymax = CI_U), alpha = 0.1, linewidth = 0.6,color = "#631879ff",fill = "transparent",linetype = "dashed") +
+  geom_hline(yintercept = 1, linetype = 2, linewidth = 0.6, color = "black") +
+  geom_hline(yintercept = 2.046980, linetype = 2, linewidth = 0.6, color = "red") +
+  labs(title = "D. IHD Mortality", x = "MVPA (min/week)", y = "HR for each interquartile range increase in PM2.5") +
+  theme_half_open(11, rel_small = 1) +xlim(0,1116)+scale_y_continuous(limits = c(0,10), 
+                                                                      breaks = seq(0, 10, 2),labels = scales::label_number(accuracy = 0.1))
+aligned_plots <- align_plots(p1, p2, align="hv", axis="tblr")
+I4 <- ggdraw(aligned_plots[[1]]) + draw_plot(aligned_plots[[2]])
+
+
+coxph(Surv(follow_time,IHD_death==1) ~ pm25_IQR+age+sex+white+college+TDI+smoke+
+        drinker+BMI+Hypertension+Dislipidemia+DM_history+solid_fuel+
+        exposure_tobacco_home,data=subset(y1,MVPA_week_sum>500)) |> reportReg()
+
+
+fit21<-cph(Surv(follow_time,AMI_death==1) ~ pm25_IQR*rcs(MVPA_week_sum,3)+age+sex+white+college+TDI+smoke+
+            drinker+BMI+Hypertension+Dislipidemia+DM_history+solid_fuel+
+            exposure_tobacco_home,x=TRUE, y=TRUE,data=y1)
+HR<- intEST(var2values = c(0:1116),model = fit21,data = y1,var1 = "pm25_IQR",var2 = "MVPA_week_sum",ci.method = "delta")
+plotINT(HR,xlab = "MVPA_week_sum")
+
+p2 <- ggplot(y1, aes(x = MVPA_week_sum)) +
+  geom_line(data = HR, aes(Value, HR), linetype = "solid", linewidth = 0.6, alpha = 1, color = "#631879ff") +
+  geom_ribbon(data = HR, aes(Value, ymin = CI_L, ymax = CI_U), alpha = 0.1, linewidth = 0.6,color = "#631879ff",fill = "transparent",linetype = "dashed") +
+  geom_hline(yintercept = 1, linetype = 2, linewidth = 0.6, color = "black") +
+  geom_hline(yintercept = 2.738044, linetype = 2, linewidth = 0.6, color = "red") + 
+  #geom_vline(xintercept = 320, linetype = 2, linewidth = 0.6, color = "black") +
+  labs(title = "E. AMI Mortality", x = "MVPA (min/week)", y = "HR for each interquartile range increase in PM2.5") +
+  theme_half_open(11, rel_small = 1) +xlim(0,1116)+  scale_x_continuous(limits = c(0,1116), breaks = seq(0,1116,300))+
+  scale_y_continuous(limits = c(0,20),breaks = seq(0, 20, 4.0),labels = scales::label_number(accuracy = 0.1))
+aligned_plots <- align_plots(p1, p2, align="hv", axis="tblr")
+I5 <- ggdraw(aligned_plots[[1]]) + draw_plot(aligned_plots[[2]])
+
+
+c1 <- ggplot(y1, aes(x = MVPA_week_sum)) +
+  geom_histogram(aes(y=(..count..)*100/sum(..count..)),binwidth= 50,show.legend = FALSE,fill="gray90",color="gray80") +
+  scale_y_continuous(limits=c(0,16),breaks = seq(0,16,4),
+                     position = "right",name = "Percentage of population(%)")+
+  theme_half_open(11, rel_small = 1) +xlim(0,920)+  theme(axis.line = element_line(color = "black"),
+                                                           panel.grid = element_blank(),panel.border = element_rect(colour = "black", fill=NA))+
+  rremove("x.axis")+
+  rremove("xlab") +
+  rremove("x.text") +
+  rremove("x.ticks") +
+  rremove("legend")
+c2 <- ggplot(y1, aes(x = MVPA_week_sum)) +
+  geom_line(data = HR, aes(Value, HR), linetype = "solid", linewidth = 0.6, alpha = 1, color = "#631879ff") +
+  geom_ribbon(data = HR, aes(Value, ymin = CI_L, ymax = CI_U), alpha = 0.1, linewidth = 0.6,color = "#631879ff",fill = "transparent",linetype = "dashed") +
+  geom_hline(yintercept = 1, linetype = 2, linewidth = 0.6, color = "black") +
+  geom_hline(yintercept = 2.738044, linetype = 2, linewidth = 0.6, color = "red") + 
+  #geom_vline(xintercept = 320, linetype = 2, linewidth = 0.6, color = "black") +
+  labs(title = "AMI Mortality", x = "MVPA (min/week)", y = "HR for each interquartile range increase in PM2.5") +
+  theme_half_open(11, rel_small = 1) +scale_x_continuous(limits = c(0,920), breaks = seq(0,1000,300))+
+  scale_y_continuous(limits = c(0,12),breaks = seq(0,12, 2.0),labels = scales::label_number(accuracy = 0.1))
+aligned_plots <- align_plots(c1, c2, align="hv", axis="tblr")
+ggdraw(aligned_plots[[1]]) + draw_plot(aligned_plots[[2]])
+
+topptx(filename ="D:/Projects/UKB/2-PA-AP/Data/Fig/Central-Image3.pptx",width =4, height =4, units = "cm")
+
+fit22<-cph(Surv(follow_time,CIHD_death==1) ~ pm25_IQR*rcs(MVPA_week_sum,3)+age+sex+white+college+TDI+smoke+
+            drinker+BMI+Hypertension+Dislipidemia+DM_history+solid_fuel+
+            exposure_tobacco_home,x=TRUE, y=TRUE,data=y1)
+HR<- intEST(var2values = c(0:1116),model = fit22,data = y1,var1 = "pm25_IQR",var2 = "MVPA_week_sum",ci.method = "delta")
+plotINT(HR,xlab = "MVPA_week_sum")
+
+p2 <- ggplot(y1, aes(x = MVPA_week_sum)) +
+  geom_line(data = HR, aes(Value, HR), linetype = "solid", linewidth = 0.6, alpha = 1, color = "#631879ff") +
+  geom_ribbon(data = HR, aes(Value, ymin = CI_L, ymax = CI_U), alpha = 0.1, linewidth = 0.6,color = "#631879ff",fill = "transparent",linetype = "dashed") +
+  geom_hline(yintercept = 1, linetype = 2, linewidth = 0.6, color = "black") +
+  labs(title = "F. CIHD Mortality", x = "MVPA (min/week)", y = "HR for each interquartile range increase in PM2.5") +
+  theme_half_open(11, rel_small = 1) +xlim(0,1116)+scale_y_continuous(limits = c(0,8), 
+                                                                      breaks = seq(0, 8, 2),labels = scales::label_number(accuracy = 0.1))
+aligned_plots <- align_plots(p1, p2, align="hv", axis="tblr")
+I6 <- ggdraw(aligned_plots[[1]]) + draw_plot(aligned_plots[[2]])
+
+I1+I2+I3+I4+I5+I6+plot_layout(ncol = 2)
+
+topptx(filename ="D:/Projects/UKB/2-PA-AP/Data/Fig/Interaction/PM25_MVPA.pptx",width =8.5, height = 12, units = "cm")
+
+
+#Effect of AP at different level of MVPA--------------------------
+##Overall------------
+###PM2.5----
+####All-cause----------------------
+quantile(y1$pm25_mean, probs = c(0.001, 0.999), na.rm = TRUE)
+summary(y1$pm25_mean)
+fit<-cph(Surv(follow_time,Mort==1) ~ MVPA_week_sum_100*rcs(pm25_mean,3)+age+sex+white+college+TDI+smoke+
+           drinker+BMI+Hypertension+Dislipidemia+DM_history,x=TRUE, y=TRUE,data=y1)
+HR<- intEST(var2values = c(0:16.937),model = fit,data = y1,var1 = "MVPA_week_sum_100",var2 = "pm25_mean",ci.method = "delta")
+plotINT(HR,xlab = "PM2.5")
+
+p1 <- ggplot(y1, aes(x = pm25_mean)) +
+  geom_histogram(aes(y=(..count..)*100/sum(..count..)),binwidth= 0.5,show.legend = FALSE,fill="gray90",color="gray80") +
+  scale_y_continuous(limits=c(0,16),breaks = seq(0,16,4),
+                     position = "right",name = "Percentage of population(%)")+
+  theme_half_open(11, rel_small = 1) +xlim(4,16.937)+  theme(axis.line = element_line(color = "black"),
+        panel.grid = element_blank(),panel.border = element_rect(colour = "black", fill=NA))+
+  rremove("x.axis")+
+  rremove("xlab") +
+  rremove("x.text") +
+  rremove("x.ticks") +
+  rremove("legend")
+
+p2 <- ggplot(y1, aes(x = pm25_mean)) +
+  geom_line(data = HR, aes(Value, HR), linetype = "solid", linewidth = 0.6, alpha = 1, color = "#003366") +
+  geom_ribbon(data = HR, aes(Value, ymin = CI_L, ymax = CI_U), alpha = 0.1, linewidth = 0.6,fill = "transparent",color = "#003366", linetype = "dashed") +
+  geom_hline(yintercept = 1, linetype = 2, linewidth = 0.6, color = "black") +
+  labs(title = "A. All-cause Mortality", x = "PM2.5 (μg/m3)", y = "HR (95%CI) for 100 minutes increase in MVPA time") +
+  theme_half_open(11, rel_small = 1) +xlim(4,16.937)+ylim(0.7,1.2)
+
+
+aligned_plots <- align_plots(p1, p2, align="hv", axis="tblr")
+A1 <- ggdraw(aligned_plots[[1]]) + draw_plot(aligned_plots[[2]])
+
+####CVD----------------------
+
+fit<-cph(Surv(follow_time,CVD_death==1) ~ MVPA_week_sum_100*rcs(pm25_mean,3)+age+sex+white+college+TDI+smoke+
+           drinker+BMI+Hypertension+Dislipidemia+DM_history,x=TRUE, y=TRUE,data=y1)
+HR<- intEST(var2values = c(0:16.937),model = fit,data = y1,var1 = "MVPA_week_sum_100",var2 = "pm25_mean",ci.method = "delta")
+plotINT(HR,xlab = "PM2.5")
+
+p1 <- ggplot(y1, aes(x = pm25_mean)) +
+  geom_histogram(aes(y=(..count..)*100/sum(..count..)),binwidth= 0.5,show.legend = FALSE,fill="gray90",color="gray80") +
+  scale_y_continuous(limits=c(0,16),breaks = seq(0,16,4),
+                     position = "right",name = "Percentage of population(%)")+
+  theme_half_open(11, rel_small = 1) +xlim(4,16.937)+  theme(axis.line = element_line(color = "black"),
+                                                             panel.grid = element_blank(),panel.border = element_rect(colour = "black", fill=NA))+
+  rremove("x.axis")+
+  rremove("xlab") +
+  rremove("x.text") +
+  rremove("x.ticks") +
+  rremove("legend")
+
+p2 <- ggplot(y1, aes(x = pm25_mean)) +
+  geom_line(data = HR, aes(Value, HR), linetype = "solid", linewidth = 0.6, alpha = 1, color = "#003366") +
+  geom_ribbon(data = HR, aes(Value, ymin = CI_L, ymax = CI_U), alpha = 0.1, linewidth = 0.6,fill = "transparent",color = "#003366", linetype = "dashed") +
+  geom_hline(yintercept = 1, linetype = 2, linewidth = 0.6, color = "black") +
+  labs(title = "B. CVD Mortality", x = "PM2.5 (μg/m3)", y = "HR (95%CI) for 100 minutes increase in MVPA time") +
+  theme_half_open(11, rel_small = 1) +xlim(4,16.937)+ylim(0.6,1.4)
+
+
+aligned_plots <- align_plots(p1, p2, align="hv", axis="tblr")
+A2 <- ggdraw(aligned_plots[[1]]) + draw_plot(aligned_plots[[2]])
+
+
+####Cere----------------------
+fit<-cph(Surv(follow_time,Cere_death==1) ~ MVPA_week_sum_100*rcs(pm25_mean,3)+age+sex+white+college+TDI+smoke+
+           drinker+BMI+Hypertension+Dislipidemia+DM_history,x=TRUE, y=TRUE,data=y1)
+HR<- intEST(var2values = c(0:16.937),model = fit,data = y1,var1 = "MVPA_week_sum_100",var2 = "pm25_mean",ci.method = "delta")
+plotINT(HR,xlab = "PM2.5")
+
+p1 <- ggplot(y1, aes(x = pm25_mean)) +
+  geom_histogram(aes(y=(..count..)*100/sum(..count..)),binwidth= 0.5,show.legend = FALSE,fill="gray90",color="gray80") +
+  scale_y_continuous(limits=c(0,16),breaks = seq(0,16,4),
+                     position = "right",name = "Percentage of population(%)")+
+  theme_half_open(11, rel_small = 1) +xlim(4,16.937)+  theme(axis.line = element_line(color = "black"),
+                                                             panel.grid = element_blank(),panel.border = element_rect(colour = "black", fill=NA))+
+  rremove("x.axis")+
+  rremove("xlab") +
+  rremove("x.text") +
+  rremove("x.ticks") +
+  rremove("legend")
+
+p2 <- ggplot(y1, aes(x = pm25_mean)) +
+  geom_line(data = HR, aes(Value, HR), linetype = "solid", linewidth = 0.6, alpha = 1, color = "#003366") +
+  geom_ribbon(data = HR, aes(Value, ymin = CI_L, ymax = CI_U), alpha = 0.1, linewidth = 0.6,fill = "transparent",color = "#003366", linetype = "dashed") +
+  geom_hline(yintercept = 1, linetype = 2, linewidth = 0.6, color = "black") +
+  labs(title = "C. Cerebrovascular Disease Mortality", x = "PM2.5 (μg/m3)", y = "HR (95%CI) for 100 minutes increase in MVPA time") +
+  theme_half_open(11, rel_small = 1) +xlim(4,16.937)+scale_y_continuous(limits = c(0.2, 1.8), 
+                                                                        breaks = seq(0.2, 1.8, 0.4))
+
+
+aligned_plots <- align_plots(p1, p2, align="hv", axis="tblr")
+A3 <- ggdraw(aligned_plots[[1]]) + draw_plot(aligned_plots[[2]])
+
+
+####IHD----------------------
+fit<-cph(Surv(follow_time,IHD_death==1) ~ MVPA_week_sum_100*rcs(pm25_mean,3)+age+sex+white+college+TDI+smoke+
+           drinker+BMI+Hypertension+Dislipidemia+DM_history,x=TRUE, y=TRUE,data=y1)
+HR<- intEST(var2values = c(0:16.937),model = fit,data = y1,var1 = "MVPA_week_sum_100",var2 = "pm25_mean",ci.method = "delta")
+plotINT(HR,xlab = "PM2.5")
+
+p1 <- ggplot(y1, aes(x = pm25_mean)) +
+  geom_histogram(aes(y=(..count..)*100/sum(..count..)),binwidth= 0.5,show.legend = FALSE,fill="gray90",color="gray80") +
+  scale_y_continuous(limits=c(0,16),breaks = seq(0,16,4),
+                     position = "right",name = "Percentage of population(%)")+
+  theme_half_open(11, rel_small = 1) +xlim(4,16.937)+  theme(axis.line = element_line(color = "black"),
+                                                             panel.grid = element_blank(),panel.border = element_rect(colour = "black", fill=NA))+
+  rremove("x.axis")+
+  rremove("xlab") +
+  rremove("x.text") +
+  rremove("x.ticks") +
+  rremove("legend")
+
+p2 <- ggplot(y1, aes(x = pm25_mean)) +
+  geom_line(data = HR, aes(Value, HR), linetype = "solid", linewidth = 0.6, alpha = 1, color = "#003366") +
+  geom_ribbon(data = HR, aes(Value, ymin = CI_L, ymax = CI_U), alpha = 0.1, linewidth = 0.6,fill = "transparent",color = "#003366", linetype = "dashed") +
+  geom_hline(yintercept = 1, linetype = 2, linewidth = 0.6, color = "black") +
+  labs(title = "D. IHD Mortality", x = "PM2.5 (μg/m3)", y = "HR (95%CI) for 100 minutes increase in MVPA time") +
+  theme_half_open(11, rel_small = 1) +xlim(4,16.937)+scale_y_continuous(limits = c(0.4, 1.6), 
+                                                                         breaks = seq(0.4, 1.6, 0.2))
+
+
+aligned_plots <- align_plots(p1, p2, align="hv", axis="tblr")
+A4 <- ggdraw(aligned_plots[[1]]) + draw_plot(aligned_plots[[2]])
+
+####AMI----------------------
+fit<-cph(Surv(follow_time,AMI_death==1) ~ MVPA_week_sum_100*rcs(pm25_mean,3)+age+sex+white+college+TDI+smoke+
+           drinker+BMI+Hypertension+Dislipidemia+DM_history,x=TRUE, y=TRUE,data=y1)
+HR<- intEST(var2values = c(0:16.937),model = fit,data = y1,var1 = "MVPA_week_sum_100",var2 = "pm25_mean",ci.method = "delta")
+plotINT(HR,xlab = "PM2.5")
+
+p1 <- ggplot(y1, aes(x = pm25_mean)) +
+  geom_histogram(aes(y=(..count..)*100/sum(..count..)),binwidth= 0.5,show.legend = FALSE,fill="gray90",color="gray80") +
+  scale_y_continuous(limits=c(0,16),breaks = seq(0,16,4),
+                     position = "right",name = "Percentage of population(%)")+
+  theme_half_open(11, rel_small = 1) +xlim(4,16.937)+  theme(axis.line = element_line(color = "black"),
+                                                             panel.grid = element_blank(),panel.border = element_rect(colour = "black", fill=NA))+
+  rremove("x.axis")+
+  rremove("xlab") +
+  rremove("x.text") +
+  rremove("x.ticks") +
+  rremove("legend")
+
+p2 <- ggplot(y1, aes(x = pm25_mean)) +
+  geom_line(data = HR, aes(Value, HR), linetype = "solid", linewidth = 0.6, alpha = 1, color = "#003366") +
+  geom_ribbon(data = HR, aes(Value, ymin = CI_L, ymax = CI_U), alpha = 0.1, linewidth = 0.6,fill = "transparent",color = "#003366", linetype = "dashed") +
+  geom_hline(yintercept = 1, linetype = 2, linewidth = 0.6, color = "black") +
+  labs(title = "E. AMI Mortality", x = "PM2.5 (μg/m3)", y = "HR (95%CI) for 100 minutes increase in MVPA time") +
+  theme_half_open(11, rel_small = 1) +xlim(4,16.937)+scale_y_continuous(limits = c(0.4, 2), 
+                                                                        breaks = seq(0.4, 2, 0.4))
+
+
+aligned_plots <- align_plots(p1, p2, align="hv", axis="tblr")
+A5 <- ggdraw(aligned_plots[[1]]) + draw_plot(aligned_plots[[2]])
+
+topptx(filename ="D:/Projects/UKB/2-PA-AP/Data/Fig/Central-Image1.pptx",width =4.2, height =3.5, units = "cm")
+
+
+####CIHD----------------------
+fit<-cph(Surv(follow_time,CIHD_death==1) ~ MVPA_week_sum_100*rcs(pm25_mean,3)+age+sex+white+college+TDI+smoke+
+           drinker+BMI+Hypertension+Dislipidemia+DM_history,x=TRUE, y=TRUE,data=y1)
+HR<- intEST(var2values = c(0:16.937),model = fit,data = y1,var1 = "MVPA_week_sum_100",var2 = "pm25_mean",ci.method = "delta")
+plotINT(HR,xlab = "PM2.5")
+
+p1 <- ggplot(y1, aes(x = pm25_mean)) +
+  geom_histogram(aes(y=(..count..)*100/sum(..count..)),binwidth= 0.5,show.legend = FALSE,fill="gray90",color="gray80") +
+  scale_y_continuous(limits=c(0,16),breaks = seq(0,16,4),
+                     position = "right",name = "Percentage of population(%)")+
+  theme_half_open(11, rel_small = 1) +xlim(4,16.937)+  theme(axis.line = element_line(color = "black"),
+                                                             panel.grid = element_blank(),panel.border = element_rect(colour = "black", fill=NA))+
+  rremove("x.axis")+
+  rremove("xlab") +
+  rremove("x.text") +
+  rremove("x.ticks") +
+  rremove("legend")
+
+p2 <- ggplot(y1, aes(x = pm25_mean)) +
+  geom_line(data = HR, aes(Value, HR), linetype = "solid", linewidth = 0.6, alpha = 1, color = "#003366") +
+  geom_ribbon(data = HR, aes(Value, ymin = CI_L, ymax = CI_U), alpha = 0.1, linewidth = 0.6,fill = "transparent",color = "#003366", linetype = "dashed") +
+  geom_hline(yintercept = 1, linetype = 2, linewidth = 0.6, color = "black") +
+  labs(title = "F. CIHD Mortality", x = "PM2.5 (μg/m3)", y = "HR (95%CI) for 100 minutes increase in MVPA time") +
+  theme_half_open(11, rel_small = 1) +xlim(4,16.937)+scale_y_continuous(limits = c(0.2, 1.4), 
+                                                                        breaks = seq(0.2, 1.4, 0.2))
+
+
+aligned_plots <- align_plots(p1, p2, align="hv", axis="tblr")
+A6 <- ggdraw(aligned_plots[[1]]) + draw_plot(aligned_plots[[2]])
+
+A1+A2+A4+A5+A6+A3+plot_layout(ncol = 2)
+
+topptx(filename ="D:/Projects/UKB/2-PA-AP/Data/Fig/MVPA-stage/Overall/PM25.pptx",width =8.5, height = 12, units = "cm")
+
+
+#AP-group MVPA RCS: PM2.5---------------
+##All-cause--------
+y1$pm25_12 <- ifelse(y1$pm25_mean >= 10,1,0)
+fit_a <- coxph(Surv(follow_time,Mort==1) ~ MVPA_week_sum_100+age+sex+white+college+TDI+smoke+
+                 drinker+BMI+Hypertension+Dislipidemia+DM_history,data=y1)
+fit_a1 <- coxph(Surv(follow_time,Mort==1) ~ MVPA_week_sum_100*pm25_12+age+sex+white+college+TDI+smoke+
+                  drinker+BMI+Hypertension+Dislipidemia+DM_history,data=y1)
+anova(fit_a,fit_a1,test="chisq")
+lmtest::lrtest(fit_a,fit_a1)
+coxph(Surv(follow_time,Mort==1) ~ MVPA_week_sum_100+age+sex+white+college+TDI+smoke+
+        drinker+BMI+Hypertension+Dislipidemia+DM_history,data=subset(y1,pm25_mean >= 10 & MVPA_week_sum < 400)) |> reportReg()
+
+yx <- subset(y1, y1$pm25_mean>=10)
+dt <- subset(yx, select = c(MVPA_week_sum,age,sex,pm25_2,pm25_3,pm25_4,
+                            follow_time,Mort,CVD_death,Resp_death,Cere_death,IHD_death,AMI_death,
+                            pm25_mean,no2_mean,white,college,TDI,smoke,drinker,
+                            BMI,Hypertension,Dislipidemia,DM_history,
+                            solid_fuel,exposure_tobacco_home))
+summary(dt)
+dd <- datadist(dt) 
+options(datadist='dd') 
+
+fit<- cph(Surv(follow_time,Mort==1) ~ rcs(MVPA_week_sum,3)+age+sex+white+college+TDI+smoke+
+            drinker+BMI+Hypertension+Dislipidemia+DM_history,data=dt) 
+dd$limits$MVPA_week_sum[2] <- 400  
+fit=update(fit)
+
+anova(fit)
+HR<-Predict(fit, MVPA_week_sum,fun=exp,ref.zero = TRUE)
+HR$upper[HR$upper>20] <- 20
+p1 <- ggplot(yx, aes(x = MVPA_week_sum)) +
+  geom_line(data = HR, aes(MVPA_week_sum,yhat), linetype = "solid", linewidth = 0.6, alpha = 1, color = "#003366") +
+  geom_ribbon(data = HR, aes(MVPA_week_sum,ymin = lower, ymax = upper), alpha = 0.1, linewidth = 0.6,fill = "#003366") +
+  geom_hline(yintercept = 1, linetype = 2, linewidth = 0.6, color = "black") +
+  labs(title = "All-cause Mortality, PM2.5 >= 10ug/m3", x = "MVPA (min/week)", y = "Hazard Ratio") +
+  theme_half_open(11, rel_small = 1) +xlim(0,1116)+scale_y_continuous(limits = c(0, 3), 
+                                                                      breaks = seq(0,3, 0.5), labels = scales::label_number(accuracy = 0.1))
+p2 <- ggplot(yx, aes(x = MVPA_week_sum)) +
+  geom_histogram(aes(y=(..count..)*100/sum(..count..)),binwidth= 50,show.legend = FALSE,fill="gray90",color="gray80") +
+  scale_y_continuous(limits=c(0,16),breaks = seq(0,16,4),
+                     position = "right",name = "Percentage of population(%)")+
+  theme_half_open(11, rel_small = 1) +xlim(10,1116)+  theme(axis.line = element_line(color = "black"),
+                                                            panel.grid = element_blank(),panel.border = element_rect(colour = "black", fill=NA))+
+  rremove("x.axis")+
+  rremove("xlab") +
+  rremove("x.text") +
+  rremove("x.ticks") +
+  rremove("legend")
+
+aligned_plots <- align_plots(p2, p1, align="hv", axis="tblr")
+PM1 <- ggdraw(aligned_plots[[1]]) + draw_plot(aligned_plots[[2]])
+
+
+yx <- subset(y1, y1$pm25_mean<10)
+dt <- subset(yx, select = c(MVPA_week_sum,age,sex,pm25_2,pm25_3,pm25_4,
+                            follow_time,Mort,CVD_death,Resp_death,Cere_death,IHD_death,AMI_death,
+                            pm25_mean,no2_mean,white,college,TDI,smoke,drinker,
+                            BMI,Hypertension,Dislipidemia,DM_history,
+                            solid_fuel,exposure_tobacco_home))
+dd <- datadist(dt) 
+options(datadist='dd') 
+
+fit<- cph(Surv(follow_time,Mort==1) ~ rcs(MVPA_week_sum,3)+age+sex+white+college+TDI+smoke+
+            drinker+BMI+Hypertension+Dislipidemia+DM_history,data=dt) 
+dd$limits$MVPA_week_sum[2] <- 400  
+fit=update(fit)
+
+anova(fit)
+HR<-Predict(fit, MVPA_week_sum,fun=exp,ref.zero = TRUE)
+
+p1 <- ggplot(y1, aes(x = MVPA_week_sum)) +
+  geom_line(data = HR, aes(MVPA_week_sum,yhat), linetype = "solid", linewidth = 0.6, alpha = 1, color = "#003366") +
+  geom_ribbon(data = HR, aes(MVPA_week_sum,ymin = lower, ymax = upper), alpha = 0.1, linewidth = 0.6,fill = "#003366") +
+  geom_hline(yintercept = 1, linetype = 2, linewidth = 0.6, color = "black") +
+  labs(title = "All-cause Mortality, PM2.5 < 10ug/m3", x = "MVPA (min/week)", y = "Hazard Ratio") +
+  theme_half_open(11, rel_small = 1) +xlim(0,1116)+scale_y_continuous(limits = c(0, 2.5), 
+                                                                      breaks = seq(0,2.5, 0.5), labels = scales::label_number(accuracy = 0.1))
+p2 <- ggplot(yx, aes(x = MVPA_week_sum)) +
+  geom_histogram(aes(y=(..count..)*100/sum(..count..)),binwidth= 50,show.legend = FALSE,fill="gray90",color="gray80") +
+  scale_y_continuous(limits=c(0,16),breaks = seq(0,16,4),
+                     position = "right",name = "Percentage of population(%)")+
+  theme_half_open(11, rel_small = 1) +xlim(10,1116)+  theme(axis.line = element_line(color = "black"),
+                                                            panel.grid = element_blank(),panel.border = element_rect(colour = "black", fill=NA))+
+  rremove("x.axis")+
+  rremove("xlab") +
+  rremove("x.text") +
+  rremove("x.ticks") +
+  rremove("legend")
+
+aligned_plots <- align_plots(p2, p1, align="hv", axis="tblr")
+PM2 <- ggdraw(aligned_plots[[1]]) + draw_plot(aligned_plots[[2]])
+
+##CVD--------
+y1$pm25_12 <- ifelse(y1$pm25_mean >= 10,1,0)
+fit_a <- coxph(Surv(follow_time,CVD_death==1) ~ MVPA_week_sum_100+age+sex+white+college+TDI+smoke+
+                 drinker+BMI+Hypertension+Dislipidemia+DM_history,data=y1)
+fit_a1 <- coxph(Surv(follow_time,CVD_death==1) ~ MVPA_week_sum_100*pm25_12+age+sex+white+college+TDI+smoke+
+                  drinker+BMI+Hypertension+Dislipidemia+DM_history,data=y1)
+anova(fit_a,fit_a1,test="chisq")
+lmtest::lrtest(fit_a,fit_a1)
+coxph(Surv(follow_time,CVD_death==1) ~ MVPA_week_sum_100+age+sex+white+college+TDI+smoke+
+        drinker+BMI+Hypertension+Dislipidemia+DM_history,data=subset(y1,pm25_mean < 10)) |> reportReg()
+
+yx <- subset(y1, y1$pm25_mean>=10)
+dt <- subset(yx, select = c(MVPA_week_sum,age,sex,pm25_2,pm25_3,pm25_4,
+                            follow_time,Mort,CVD_death,Resp_death,Cere_death,IHD_death,AMI_death,
+                            pm25_mean,no2_mean,white,college,TDI,smoke,drinker,
+                            BMI,Hypertension,Dislipidemia,DM_history,
+                            solid_fuel,exposure_tobacco_home))
+dd <- datadist(dt) 
+options(datadist='dd') 
+
+fit<- cph(Surv(follow_time,CVD_death==1) ~ rcs(MVPA_week_sum,3)+age+sex+white+college+TDI+smoke+
+            drinker+BMI+Hypertension+Dislipidemia+DM_history,data=dt) 
+dd$limits$MVPA_week_sum[2] <- 400 
+fit=update(fit)
+
+anova(fit)
+HR<-Predict(fit, MVPA_week_sum,fun=exp,ref.zero = TRUE)
+HR$upper[HR$upper>20] <- 20
+p1 <- ggplot(yx, aes(x = MVPA_week_sum)) +
+  geom_line(data = HR, aes(MVPA_week_sum,yhat), linetype = "solid", linewidth = 0.6, alpha = 1, color = "#003366") +
+  geom_ribbon(data = HR, aes(MVPA_week_sum,ymin = lower, ymax = upper), alpha = 0.1, linewidth = 0.6,fill = "#003366") +
+  geom_hline(yintercept = 1, linetype = 2, linewidth = 0.6, color = "black") +
+  labs(title = "CVD Mortality, PM2.5 >= 10ug/m3", x = "MVPA (min/week)", y = "Hazard Ratio") +
+  theme_half_open(11, rel_small = 1) +xlim(0,1116)+scale_y_continuous(limits = c(0, 4), 
+                                                                      breaks = seq(0,4, 1), labels = scales::label_number(accuracy = 0.1))
+p2 <- ggplot(yx, aes(x = MVPA_week_sum)) +
+  geom_histogram(aes(y=(..count..)*100/sum(..count..)),binwidth= 50,show.legend = FALSE,fill="gray90",color="gray80") +
+  scale_y_continuous(limits=c(0,16),breaks = seq(0,16,4),
+                     position = "right",name = "Percentage of population(%)")+
+  theme_half_open(11, rel_small = 1) +xlim(10,1116)+  theme(axis.line = element_line(color = "black"),
+                                                            panel.grid = element_blank(),panel.border = element_rect(colour = "black", fill=NA))+
+  rremove("x.axis")+
+  rremove("xlab") +
+  rremove("x.text") +
+  rremove("x.ticks") +
+  rremove("legend")
+
+aligned_plots <- align_plots(p2, p1, align="hv", axis="tblr")
+PM3 <- ggdraw(aligned_plots[[1]]) + draw_plot(aligned_plots[[2]])
+
+
+yx <- subset(y1, y1$pm25_mean<10)
+dt <- subset(yx, select = c(MVPA_week_sum,age,sex,pm25_2,pm25_3,pm25_4,
+                            follow_time,Mort,CVD_death,Resp_death,Cere_death,IHD_death,AMI_death,
+                            pm25_mean,no2_mean,white,college,TDI,smoke,drinker,
+                            BMI,Hypertension,Dislipidemia,DM_history,
+                            solid_fuel,exposure_tobacco_home))
+dd <- datadist(dt) 
+options(datadist='dd') 
+
+fit<- cph(Surv(follow_time,CVD_death==1) ~ rcs(MVPA_week_sum,3)+age+sex+white+college+TDI+smoke+
+            drinker+BMI+Hypertension+Dislipidemia+DM_history,data=dt) 
+dd$limits$MVPA_week_sum[2] <- 400 
+fit=update(fit)
+
+anova(fit)
+HR<-Predict(fit, MVPA_week_sum,fun=exp,ref.zero = TRUE)
+
+p1 <- ggplot(y1, aes(x = MVPA_week_sum)) +
+  geom_line(data = HR, aes(MVPA_week_sum,yhat), linetype = "solid", linewidth = 0.6, alpha = 1, color = "#003366") +
+  geom_ribbon(data = HR, aes(MVPA_week_sum,ymin = lower, ymax = upper), alpha = 0.1, linewidth = 0.6,fill = "#003366") +
+  geom_hline(yintercept = 1, linetype = 2, linewidth = 0.6, color = "black") +
+  labs(title = "CVD Mortality, PM2.5 < 10ug/m3", x = "MVPA (min/week)", y = "Hazard Ratio") +
+  theme_half_open(11, rel_small = 1) +xlim(0,1116)+scale_y_continuous(limits = c(0, 2.5), 
+                                                                      breaks = seq(0,2.5, 0.5), labels = scales::label_number(accuracy = 0.1))
+p2 <- ggplot(yx, aes(x = MVPA_week_sum)) +
+  geom_histogram(aes(y=(..count..)*100/sum(..count..)),binwidth= 50,show.legend = FALSE,fill="gray90",color="gray80") +
+  scale_y_continuous(limits=c(0,16),breaks = seq(0,16,4),
+                     position = "right",name = "Percentage of population(%)")+
+  theme_half_open(11, rel_small = 1) +xlim(10,1116)+  theme(axis.line = element_line(color = "black"),
+                                                            panel.grid = element_blank(),panel.border = element_rect(colour = "black", fill=NA))+
+  rremove("x.axis")+
+  rremove("xlab") +
+  rremove("x.text") +
+  rremove("x.ticks") +
+  rremove("legend")
+
+aligned_plots <- align_plots(p2, p1, align="hv", axis="tblr")
+PM4 <- ggdraw(aligned_plots[[1]]) + draw_plot(aligned_plots[[2]])
+
+##Cere--------
+y1$pm25_12 <- ifelse(y1$pm25_mean >= 10,1,0)
+fit_a <- coxph(Surv(follow_time,Cere_death==1) ~ MVPA_week_sum_100+age+sex+white+college+TDI+smoke+
+                 drinker+BMI+Hypertension+Dislipidemia+DM_history,data=y1)
+fit_a1 <- coxph(Surv(follow_time,Cere_death==1) ~ MVPA_week_sum_100*pm25_12+age+sex+white+college+TDI+smoke+
+                  drinker+BMI+Hypertension+Dislipidemia+DM_history,data=y1)
+anova(fit_a,fit_a1,test="chisq")
+lmtest::lrtest(fit_a,fit_a1)
+coxph(Surv(follow_time,Cere_death==1) ~ MVPA_week_sum_100+age+sex+white+college+TDI+smoke+
+        drinker+BMI+Hypertension+Dislipidemia+DM_history,data=subset(y1,pm25_mean >= 10)) |> reportReg()
+
+yx <- subset(y1, y1$pm25_mean>=10)
+dt <- subset(yx, select = c(MVPA_week_sum,age,sex,pm25_2,pm25_3,pm25_4,
+                            follow_time,Mort,CVD_death,Resp_death,Cere_death,IHD_death,AMI_death,
+                            pm25_mean,no2_mean,white,college,TDI,smoke,drinker,
+                            BMI,Hypertension,Dislipidemia,DM_history,
+                            solid_fuel,exposure_tobacco_home))
+dd <- datadist(dt) 
+options(datadist='dd')
+
+fit<- cph(Surv(follow_time,Cere_death==1) ~ rcs(MVPA_week_sum,3)+age+sex+white+college+TDI+smoke+
+            drinker+BMI+Hypertension+Dislipidemia+DM_history,data=dt) 
+dd$limits$MVPA_week_sum[2] <- 400 
+fit=update(fit)
+
+anova(fit)
+HR<-Predict(fit, MVPA_week_sum,fun=exp,ref.zero = TRUE)
+HR$upper[HR$upper>20] <- 20
+p1 <- ggplot(yx, aes(x = MVPA_week_sum)) +
+  geom_line(data = HR, aes(MVPA_week_sum,yhat), linetype = "solid", linewidth = 0.6, alpha = 1, color = "#003366") +
+  geom_ribbon(data = HR, aes(MVPA_week_sum,ymin = lower, ymax = upper), alpha = 0.1, linewidth = 0.6,fill = "#003366") +
+  geom_hline(yintercept = 1, linetype = 2, linewidth = 0.6, color = "black") +
+  labs(title = "Cerebrovascular Mortality, PM2.5 >= 10ug/m3", x = "MVPA (min/week)", y = "Hazard Ratio") +
+  theme_half_open(11, rel_small = 1) +xlim(0,1116)+scale_y_continuous(limits = c(0, 4), 
+                                                                      breaks = seq(0,4, 1), labels = scales::label_number(accuracy = 0.1))
+p2 <- ggplot(yx, aes(x = MVPA_week_sum)) +
+  geom_histogram(aes(y=(..count..)*100/sum(..count..)),binwidth= 50,show.legend = FALSE,fill="gray90",color="gray80") +
+  scale_y_continuous(limits=c(0,16),breaks = seq(0,16,4),
+                     position = "right",name = "Percentage of population(%)")+
+  theme_half_open(11, rel_small = 1) +xlim(10,1116)+  theme(axis.line = element_line(color = "black"),
+                                                            panel.grid = element_blank(),panel.border = element_rect(colour = "black", fill=NA))+
+  rremove("x.axis")+
+  rremove("xlab") +
+  rremove("x.text") +
+  rremove("x.ticks") +
+  rremove("legend")
+
+aligned_plots <- align_plots(p2, p1, align="hv", axis="tblr")
+PM5 <- ggdraw(aligned_plots[[1]]) + draw_plot(aligned_plots[[2]])
+
+
+yx <- subset(y1, y1$pm25_mean<10)
+dt <- subset(yx, select = c(MVPA_week_sum,age,sex,pm25_2,pm25_3,pm25_4,
+                            follow_time,Mort,CVD_death,Resp_death,Cere_death,IHD_death,AMI_death,
+                            pm25_mean,no2_mean,white,college,TDI,smoke,drinker,
+                            BMI,Hypertension,Dislipidemia,DM_history,
+                            solid_fuel,exposure_tobacco_home))
+dd <- datadist(dt) 
+options(datadist='dd') 
+
+fit<- cph(Surv(follow_time,Cere_death==1) ~ rcs(MVPA_week_sum,3)+age+sex+white+college+TDI+smoke+
+            drinker+BMI+Hypertension+Dislipidemia+DM_history,data=dt) 
+dd$limits$MVPA_week_sum[2] <- 400 
+fit=update(fit)
+
+anova(fit)
+HR<-Predict(fit, MVPA_week_sum,fun=exp,ref.zero = TRUE)
+
+p1 <- ggplot(y1, aes(x = MVPA_week_sum)) +
+  geom_line(data = HR, aes(MVPA_week_sum,yhat), linetype = "solid", linewidth = 0.6, alpha = 1, color = "#003366") +
+  geom_ribbon(data = HR, aes(MVPA_week_sum,ymin = lower, ymax = upper), alpha = 0.1, linewidth = 0.6,fill = "#003366") +
+  geom_hline(yintercept = 1, linetype = 2, linewidth = 0.6, color = "black") +
+  labs(title = "Cerebrovascular Disease Mortality, PM2.5 < 10ug/m3", x = "MVPA (min/week)", y = "Hazard Ratio") +
+  theme_half_open(11, rel_small = 1) +xlim(0,1116)+scale_y_continuous(limits = c(0, 8), 
+                                                                      breaks = seq(0,8, 2), labels = scales::label_number(accuracy = 0.1))
+p2 <- ggplot(yx, aes(x = MVPA_week_sum)) +
+  geom_histogram(aes(y=(..count..)*100/sum(..count..)),binwidth= 50,show.legend = FALSE,fill="gray90",color="gray80") +
+  scale_y_continuous(limits=c(0,16),breaks = seq(0,16,4),
+                     position = "right",name = "Percentage of population(%)")+
+  theme_half_open(11, rel_small = 1) +xlim(10,1116)+  theme(axis.line = element_line(color = "black"),
+                                                            panel.grid = element_blank(),panel.border = element_rect(colour = "black", fill=NA))+
+  rremove("x.axis")+
+  rremove("xlab") +
+  rremove("x.text") +
+  rremove("x.ticks") +
+  rremove("legend")
+
+aligned_plots <- align_plots(p2, p1, align="hv", axis="tblr")
+PM6 <- ggdraw(aligned_plots[[1]]) + draw_plot(aligned_plots[[2]])
+
+##IHD--------
+y1$pm25_12 <- ifelse(y1$pm25_mean >= 10,1,0)
+fit_a <- coxph(Surv(follow_time,IHD_death==1) ~ MVPA_week_sum_100+age+sex+white+college+TDI+smoke+
+                 drinker+BMI+Hypertension+Dislipidemia+DM_history,data=y1)
+fit_a1 <- coxph(Surv(follow_time,IHD_death==1) ~ MVPA_week_sum_100*pm25_12+age+sex+white+college+TDI+smoke+
+                  drinker+BMI+Hypertension+Dislipidemia+DM_history,data=y1)
+anova(fit_a,fit_a1,test="chisq")
+lmtest::lrtest(fit_a,fit_a1)
+coxph(Surv(follow_time,IHD_death==1) ~ MVPA_week_sum_100+age+sex+white+college+TDI+smoke+
+        drinker+BMI+Hypertension+Dislipidemia+DM_history,data=subset(y1,pm25_mean >= 10 & MVPA_week_sum >=400)) |> reportReg()
+
+yx <- subset(y1, y1$pm25_mean>=10)
+dt <- subset(yx, select = c(MVPA_week_sum,age,sex,pm25_2,pm25_3,pm25_4,
+                            follow_time,Mort,CVD_death,Resp_death,Cere_death,IHD_death,AMI_death,
+                            pm25_mean,no2_mean,white,college,TDI,smoke,drinker,
+                            BMI,Hypertension,Dislipidemia,DM_history,
+                            solid_fuel,exposure_tobacco_home))
+dd <- datadist(dt) #为后续程序设定数据环境
+options(datadist='dd') #为后续程序设定数据环境
+# 拟合模型
+fit<- cph(Surv(follow_time,IHD_death==1) ~ rcs(MVPA_week_sum,3)+age+sex+white+college+TDI+smoke+
+            drinker+BMI+Hypertension+Dislipidemia+DM_history,data=dt) 
+dd$limits$MVPA_week_sum[2] <- 400 ###这里是设置参考点，也就是HR为1的点，常见的为中位数或者临床有意义的点 
+fit=update(fit)
+# P<0.05为存在非线性关系
+anova(fit)
+HR<-Predict(fit, MVPA_week_sum,fun=exp,ref.zero = TRUE)
+HR$upper[HR$upper>20] <- 20
+p1 <- ggplot(yx, aes(x = MVPA_week_sum)) +
+  geom_line(data = HR, aes(MVPA_week_sum,yhat), linetype = "solid", linewidth = 0.6, alpha = 1, color = "#003366") +
+  geom_ribbon(data = HR, aes(MVPA_week_sum,ymin = lower, ymax = upper), alpha = 0.1, linewidth = 0.6,fill = "#003366") +
+  geom_hline(yintercept = 1, linetype = 2, linewidth = 0.6, color = "black") +
+  labs(title = "IHD Mortality, PM2.5 >= 10ug/m3", x = "MVPA (min/week)", y = "Hazard Ratio") +
+  theme_half_open(11, rel_small = 1) +xlim(0,1116)+scale_y_continuous(limits = c(0, 4), 
+                                                                      breaks = seq(0,4,1), labels = scales::label_number(accuracy = 0.1))
+p2 <- ggplot(yx, aes(x = MVPA_week_sum)) +
+  geom_histogram(aes(y=(..count..)*100/sum(..count..)),binwidth= 50,show.legend = FALSE,fill="gray90",color="gray80") +
+  scale_y_continuous(limits=c(0,16),breaks = seq(0,16,4),
+                     position = "right",name = "Percentage of population(%)")+
+  theme_half_open(11, rel_small = 1) +xlim(10,1116)+  theme(axis.line = element_line(color = "black"),
+                                                            panel.grid = element_blank(),panel.border = element_rect(colour = "black", fill=NA))+
+  rremove("x.axis")+
+  rremove("xlab") +
+  rremove("x.text") +
+  rremove("x.ticks") +
+  rremove("legend")
+
+aligned_plots <- align_plots(p2, p1, align="hv", axis="tblr")
+PM7 <- ggdraw(aligned_plots[[1]]) + draw_plot(aligned_plots[[2]])
+
+
+yx <- subset(y1, y1$pm25_mean<10)
+dt <- subset(yx, select = c(MVPA_week_sum,age,sex,pm25_2,pm25_3,pm25_4,
+                            follow_time,Mort,CVD_death,Resp_death,Cere_death,IHD_death,AMI_death,
+                            pm25_mean,no2_mean,white,college,TDI,smoke,drinker,
+                            BMI,Hypertension,Dislipidemia,DM_history,
+                            solid_fuel,exposure_tobacco_home))
+dd <- datadist(dt) #为后续程序设定数据环境
+options(datadist='dd') #为后续程序设定数据环境
+# 拟合模型
+fit<- cph(Surv(follow_time,IHD_death==1) ~ rcs(MVPA_week_sum,3)+age+sex+white+college+TDI+smoke+
+            drinker+BMI+Hypertension+Dislipidemia+DM_history,data=dt) 
+dd$limits$MVPA_week_sum[2] <- 400 ###这里是设置参考点，也就是HR为1的点，常见的为中位数或者临床有意义的点 
+fit=update(fit)
+# P<0.05为存在非线性关系
+anova(fit)
+HR<-Predict(fit, MVPA_week_sum,fun=exp,ref.zero = TRUE)
+
+p1 <- ggplot(y1, aes(x = MVPA_week_sum)) +
+  geom_line(data = HR, aes(MVPA_week_sum,yhat), linetype = "solid", linewidth = 0.6, alpha = 1, color = "#003366") +
+  geom_ribbon(data = HR, aes(MVPA_week_sum,ymin = lower, ymax = upper), alpha = 0.1, linewidth = 0.6,fill = "#003366") +
+  geom_hline(yintercept = 1, linetype = 2, linewidth = 0.6, color = "black") +
+  labs(title = "IHD Mortality, PM2.5 < 10ug/m3", x = "MVPA (min/week)", y = "Hazard Ratio") +
+  theme_half_open(11, rel_small = 1) +xlim(0,1116)+scale_y_continuous(limits = c(0, 3), 
+                                                                      breaks = seq(0,3, 0.5), labels = scales::label_number(accuracy = 0.1))
+p2 <- ggplot(yx, aes(x = MVPA_week_sum)) +
+  geom_histogram(aes(y=(..count..)*100/sum(..count..)),binwidth= 50,show.legend = FALSE,fill="gray90",color="gray80") +
+  scale_y_continuous(limits=c(0,16),breaks = seq(0,16,4),
+                     position = "right",name = "Percentage of population(%)")+
+  theme_half_open(11, rel_small = 1) +xlim(10,1116)+  theme(axis.line = element_line(color = "black"),
+                                                            panel.grid = element_blank(),panel.border = element_rect(colour = "black", fill=NA))+
+  rremove("x.axis")+
+  rremove("xlab") +
+  rremove("x.text") +
+  rremove("x.ticks") +
+  rremove("legend")
+
+aligned_plots <- align_plots(p2, p1, align="hv", axis="tblr")
+PM8 <- ggdraw(aligned_plots[[1]]) + draw_plot(aligned_plots[[2]])
+
+##AMI--------
+y1$pm25_12 <- ifelse(y1$pm25_mean >= 10,1,0)
+fit_a <- coxph(Surv(follow_time,AMI_death==1) ~ MVPA_week_sum_100+age+sex+white+college+TDI+smoke+
+                 drinker+BMI+Hypertension+Dislipidemia+DM_history,data=y1)
+fit_a1 <- coxph(Surv(follow_time,AMI_death==1) ~ MVPA_week_sum_100*pm25_12+age+sex+white+college+TDI+smoke+
+                  drinker+BMI+Hypertension+Dislipidemia+DM_history,data=y1)
+anova(fit_a,fit_a1,test="chisq")
+lmtest::lrtest(fit_a,fit_a1)
+coxph(Surv(follow_time,AMI_death==1) ~ MVPA_week_sum_100+age+sex+white+college+TDI+smoke+
+        drinker+BMI+Hypertension+Dislipidemia+DM_history,data=subset(y1,pm25_mean >= 10 &MVPA_week_sum<400)) |> reportReg()
+
+yx <- subset(y1, y1$pm25_mean>=10)
+dt <- subset(yx, select = c(MVPA_week_sum,age,sex,pm25_2,pm25_3,pm25_4,
+                            follow_time,Mort,CVD_death,Resp_death,Cere_death,IHD_death,AMI_death,
+                            pm25_mean,no2_mean,white,college,TDI,smoke,drinker,
+                            BMI,Hypertension,Dislipidemia,DM_history,
+                            solid_fuel,exposure_tobacco_home))
+dd <- datadist(dt) #为后续程序设定数据环境
+options(datadist='dd') #为后续程序设定数据环境
+# 拟合模型
+fit<- cph(Surv(follow_time,AMI_death==1) ~ rcs(MVPA_week_sum,3)+age+sex+white+college+TDI+smoke+
+            drinker+BMI+Hypertension+Dislipidemia+DM_history,data=dt) 
+dd$limits$MVPA_week_sum[2] <- 400 ###这里是设置参考点，也就是HR为1的点，常见的为中位数或者临床有意义的点 
+fit=update(fit)
+# P<0.05为存在非线性关系
+anova(fit)
+HR<-Predict(fit, MVPA_week_sum,fun=exp,ref.zero = TRUE)
+HR$upper[HR$upper>20] <- 20
+p1 <- ggplot(yx, aes(x = MVPA_week_sum)) +
+  geom_line(data = HR, aes(MVPA_week_sum,yhat), linetype = "solid", linewidth = 0.6, alpha = 1, color = "#003366") +
+  geom_ribbon(data = HR, aes(MVPA_week_sum,ymin = lower, ymax = upper), alpha = 0.1, linewidth = 0.6,fill = "#003366") +
+  geom_hline(yintercept = 1, linetype = 2, linewidth = 0.6, color = "black") +
+  labs(title = "AMI Mortality, PM2.5 >= 10ug/m3", x = "MVPA (min/week)", y = "Hazard Ratio") +
+  theme_half_open(11, rel_small = 1) +xlim(0,1116)+scale_y_continuous(limits = c(0, 10), 
+                                                                      breaks = seq(0,10, 2), labels = scales::label_number(accuracy = 0.1))
+p2 <- ggplot(yx, aes(x = MVPA_week_sum)) +
+  geom_histogram(aes(y=(..count..)*100/sum(..count..)),binwidth= 50,show.legend = FALSE,fill="gray90",color="gray80") +
+  scale_y_continuous(limits=c(0,16),breaks = seq(0,16,4),
+                     position = "right",name = "Percentage of population(%)")+
+  theme_half_open(11, rel_small = 1) +xlim(10,1116)+  theme(axis.line = element_line(color = "black"),
+                                                            panel.grid = element_blank(),panel.border = element_rect(colour = "black", fill=NA))+
+  rremove("x.axis")+
+  rremove("xlab") +
+  rremove("x.text") +
+  rremove("x.ticks") +
+  rremove("legend")
+
+aligned_plots <- align_plots(p2, p1, align="hv", axis="tblr")
+PM9 <- ggdraw(aligned_plots[[1]]) + draw_plot(aligned_plots[[2]])
+
+
+yx <- subset(y1, y1$pm25_mean<10)
+dt <- subset(yx, select = c(MVPA_week_sum,age,sex,pm25_2,pm25_3,pm25_4,
+                            follow_time,Mort,CVD_death,Resp_death,Cere_death,IHD_death,AMI_death,
+                            pm25_mean,no2_mean,white,college,TDI,smoke,drinker,
+                            BMI,Hypertension,Dislipidemia,DM_history,
+                            solid_fuel,exposure_tobacco_home))
+dd <- datadist(dt) #为后续程序设定数据环境
+options(datadist='dd') #为后续程序设定数据环境
+# 拟合模型
+fit<- cph(Surv(follow_time,AMI_death==1) ~ rcs(MVPA_week_sum,3)+age+sex+white+college+TDI+smoke+
+            drinker+BMI+Hypertension+Dislipidemia+DM_history,data=dt) 
+dd$limits$MVPA_week_sum[2] <- 400 ###这里是设置参考点，也就是HR为1的点，常见的为中位数或者临床有意义的点 
+fit=update(fit)
+# P<0.05为存在非线性关系
+anova(fit)
+HR<-Predict(fit, MVPA_week_sum,fun=exp,ref.zero = TRUE)
+
+p1 <- ggplot(y1, aes(x = MVPA_week_sum)) +
+  geom_line(data = HR, aes(MVPA_week_sum,yhat), linetype = "solid", linewidth = 0.6, alpha = 1, color = "#003366") +
+  geom_ribbon(data = HR, aes(MVPA_week_sum,ymin = lower, ymax = upper), alpha = 0.1, linewidth = 0.6,fill = "#003366") +
+  geom_hline(yintercept = 1, linetype = 2, linewidth = 0.6, color = "black") +
+  labs(title = "AMI Mortality, PM2.5 < 10ug/m3", x = "MVPA (min/week)", y = "Hazard Ratio") +
+  theme_half_open(11, rel_small = 1) +xlim(0,1116)+scale_y_continuous(limits = c(0, 4), 
+                                                                      breaks = seq(0,4, 1), labels = scales::label_number(accuracy = 0.1))
+p2 <- ggplot(yx, aes(x = MVPA_week_sum)) +
+  geom_histogram(aes(y=(..count..)*100/sum(..count..)),binwidth= 50,show.legend = FALSE,fill="gray90",color="gray80") +
+  scale_y_continuous(limits=c(0,16),breaks = seq(0,16,4),
+                     position = "right",name = "Percentage of population(%)")+
+  theme_half_open(11, rel_small = 1) +xlim(10,1116)+  theme(axis.line = element_line(color = "black"),
+                                                            panel.grid = element_blank(),panel.border = element_rect(colour = "black", fill=NA))+
+  rremove("x.axis")+
+  rremove("xlab") +
+  rremove("x.text") +
+  rremove("x.ticks") +
+  rremove("legend")
+
+aligned_plots <- align_plots(p2, p1, align="hv", axis="tblr")
+PM10 <- ggdraw(aligned_plots[[1]]) + draw_plot(aligned_plots[[2]])
+
+##CIHD--------
+y1$pm25_12 <- ifelse(y1$pm25_mean >= 10,1,0)
+fit_a <- coxph(Surv(follow_time,CIHD_death==1) ~ MVPA_week_sum_100+age+sex+white+college+TDI+smoke+
+                 drinker+BMI+Hypertension+Dislipidemia+DM_history,data=y1)
+fit_a1 <- coxph(Surv(follow_time,CIHD_death==1) ~ MVPA_week_sum_100*pm25_12+age+sex+white+college+TDI+smoke+
+                  drinker+BMI+Hypertension+Dislipidemia+DM_history,data=y1)
+anova(fit_a,fit_a1,test="chisq")
+lmtest::lrtest(fit_a,fit_a1)
+coxph(Surv(follow_time,CIHD_death==1) ~ MVPA_week_sum_100+age+sex+white+college+TDI+smoke+
+        drinker+BMI+Hypertension+Dislipidemia+DM_history,data=subset(y1,pm25_mean < 10)) |> reportReg()
+
+yx <- subset(y1, y1$pm25_mean>=10)
+dt <- subset(yx, select = c(MVPA_week_sum,age,sex,pm25_2,pm25_3,pm25_4,
+                            follow_time,Mort,CVD_death,Resp_death,Cere_death,IHD_death,AMI_death,CIHD_death,
+                            pm25_mean,no2_mean,white,college,TDI,smoke,drinker,
+                            BMI,Hypertension,Dislipidemia,DM_history,
+                            solid_fuel,exposure_tobacco_home))
+dd <- datadist(dt) #为后续程序设定数据环境
+options(datadist='dd') #为后续程序设定数据环境
+# 拟合模型
+fit<- cph(Surv(follow_time,CIHD_death==1) ~ rcs(MVPA_week_sum,3)+age+sex+white+college+TDI+smoke+
+            drinker+BMI+Hypertension+Dislipidemia+DM_history,data=dt) 
+dd$limits$MVPA_week_sum[2] <- 400 ###这里是设置参考点，也就是HR为1的点，常见的为中位数或者临床有意义的点 
+fit=update(fit)
+# P<0.05为存在非线性关系
+anova(fit)
+HR<-Predict(fit, MVPA_week_sum,fun=exp,ref.zero = TRUE)
+HR$upper[HR$upper>20] <- 20
+p1 <- ggplot(yx, aes(x = MVPA_week_sum)) +
+  geom_line(data = HR, aes(MVPA_week_sum,yhat), linetype = "solid", linewidth = 0.6, alpha = 1, color = "#003366") +
+  geom_ribbon(data = HR, aes(MVPA_week_sum,ymin = lower, ymax = upper), alpha = 0.1, linewidth = 0.6,fill = "#003366") +
+  geom_hline(yintercept = 1, linetype = 2, linewidth = 0.6, color = "black") +
+  labs(title = "CIHD Mortality, PM2.5 >= 10ug/m3", x = "MVPA (min/week)", y = "Hazard Ratio") +
+  theme_half_open(11, rel_small = 1) +xlim(0,1116)+scale_y_continuous(limits = c(0, 4), 
+                                                                      breaks = seq(0,4, 1), labels = scales::label_number(accuracy = 0.1))
+p2 <- ggplot(yx, aes(x = MVPA_week_sum)) +
+  geom_histogram(aes(y=(..count..)*100/sum(..count..)),binwidth= 50,show.legend = FALSE,fill="gray90",color="gray80") +
+  scale_y_continuous(limits=c(0,16),breaks = seq(0,16,4),
+                     position = "right",name = "Percentage of population(%)")+
+  theme_half_open(11, rel_small = 1) +xlim(10,1116)+  theme(axis.line = element_line(color = "black"),
+                                                            panel.grid = element_blank(),panel.border = element_rect(colour = "black", fill=NA))+
+  rremove("x.axis")+
+  rremove("xlab") +
+  rremove("x.text") +
+  rremove("x.ticks") +
+  rremove("legend")
+
+aligned_plots <- align_plots(p2, p1, align="hv", axis="tblr")
+PM11 <- ggdraw(aligned_plots[[1]]) + draw_plot(aligned_plots[[2]])
+
+
+yx <- subset(y1, y1$pm25_mean<10)
+dt <- subset(yx, select = c(MVPA_week_sum,age,sex,pm25_2,pm25_3,pm25_4,
+                            follow_time,Mort,CVD_death,Resp_death,Cere_death,IHD_death,AMI_death,CIHD_death,
+                            pm25_mean,no2_mean,white,college,TDI,smoke,drinker,
+                            BMI,Hypertension,Dislipidemia,DM_history,
+                            solid_fuel,exposure_tobacco_home))
+dd <- datadist(dt) #为后续程序设定数据环境
+options(datadist='dd') #为后续程序设定数据环境
+# 拟合模型
+fit<- cph(Surv(follow_time,CIHD_death==1) ~ rcs(MVPA_week_sum,3)+age+sex+white+college+TDI+smoke+
+            drinker+BMI+Hypertension+Dislipidemia+DM_history,data=dt) 
+dd$limits$MVPA_week_sum[2] <- 400 ###这里是设置参考点，也就是HR为1的点，常见的为中位数或者临床有意义的点 
+fit=update(fit)
+# P<0.05为存在非线性关系
+anova(fit)
+HR<-Predict(fit, MVPA_week_sum,fun=exp,ref.zero = TRUE)
+
+p1 <- ggplot(y1, aes(x = MVPA_week_sum)) +
+  geom_line(data = HR, aes(MVPA_week_sum,yhat), linetype = "solid", linewidth = 0.6, alpha = 1, color = "#003366") +
+  geom_ribbon(data = HR, aes(MVPA_week_sum,ymin = lower, ymax = upper), alpha = 0.1, linewidth = 0.6,fill = "#003366") +
+  geom_hline(yintercept = 1, linetype = 2, linewidth = 0.6, color = "black") +
+  labs(title = "CIHD Mortality, PM2.5 < 10ug/m3", x = "MVPA (min/week)", y = "Hazard Ratio") +
+  theme_half_open(11, rel_small = 1) +xlim(0,1116)+scale_y_continuous(limits = c(0, 3), 
+                                                                      breaks = seq(0,3, 0.5), labels = scales::label_number(accuracy = 0.1))
+p2 <- ggplot(yx, aes(x = MVPA_week_sum)) +
+  geom_histogram(aes(y=(..count..)*100/sum(..count..)),binwidth= 50,show.legend = FALSE,fill="gray90",color="gray80") +
+  scale_y_continuous(limits=c(0,16),breaks = seq(0,16,4),
+                     position = "right",name = "Percentage of population(%)")+
+  theme_half_open(11, rel_small = 1) +xlim(10,1116)+  theme(axis.line = element_line(color = "black"),
+                                                            panel.grid = element_blank(),panel.border = element_rect(colour = "black", fill=NA))+
+  rremove("x.axis")+
+  rremove("xlab") +
+  rremove("x.text") +
+  rremove("x.ticks") +
+  rremove("legend")
+
+aligned_plots <- align_plots(p2, p1, align="hv", axis="tblr")
+PM12 <- ggdraw(aligned_plots[[1]]) + draw_plot(aligned_plots[[2]])
+
+PM1+PM2+PM3+PM4+PM7+PM8+plot_layout(ncol = 2)
+
+topptx(filename ="D:/Projects/UKB/2-PA-AP/Data/Fig/rcs/pm25_2_RCS-1.pptx",width =8.5, height = 12, units = "cm")
+
+PM9+PM10+PM11+PM12+PM5+PM6+plot_layout(ncol = 2)
+
+topptx(filename ="D:/Projects/UKB/2-PA-AP/Data/Fig/rcs/pm25_2_RCS-2.pptx",width =8.5, height = 12, units = "cm")
