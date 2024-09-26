@@ -1,0 +1,532 @@
+#Endpoint event--------------------
+y$Mort[y$Date.of.death...Instance.0==""] <- 0
+y$Mort[y$Date.of.death...Instance.0!=""] <- 1
+table(y$Mort,exclude = NULL)
+
+y$date_in <- as.Date(y$End.time.of.wear)
+y$date_death0 <- as.Date(y$Date.of.death...Instance.0)
+y$date_end <- as.Date("2022-11-30")
+summary(y$date_death0)
+summary(y$date_in)
+#View(y[, c("Participant.ID","End.time.of.wear","date_in")])
+
+y$date_end[is.na(y$date_death0)!=T] <- y$date_death0[is.na(y$date_death0)!=T]
+
+y$follow_time <- difftime(y$date_end, y$date_in, units = c("auto"))
+y$follow_time <- as.numeric(y$follow_time, units = "days") # 日期转换成数值
+y$follow_time <- y$follow_time/365
+summary(y$follow_time)
+
+y$CVD_death <- ifelse(grepl("I0|I1|I2|I3|I4|I5|I6|I7|I8|I9", y$Underlying..primary..cause.of.death..ICD10...Instance.0),1,0)
+table(y$CVD_death,exclude = NULL)
+y$IHD_death <- ifelse(grepl("I20|I21|I22|I23|I24|I25", y$Underlying..primary..cause.of.death..ICD10...Instance.0),1,0)
+y$AMI_death <- ifelse(grepl("I21", y$Underlying..primary..cause.of.death..ICD10...Instance.0),1,0)
+y$CIHD_death <- ifelse(grepl("I25", y$Underlying..primary..cause.of.death..ICD10...Instance.0),1,0)
+
+y$Cere_death <- ifelse(grepl("I6", y$Underlying..primary..cause.of.death..ICD10...Instance.0),1,0)
+y$Stroke_death <- ifelse(grepl("I60|I61|I63|I64", y$Underlying..primary..cause.of.death..ICD10...Instance.0),1,0)
+
+y$Cancer_death <- ifelse(grepl("C0|C1|C2|C3|C4|C5|C6|C7|C8|C9", y$Underlying..primary..cause.of.death..ICD10...Instance.0),1,0)
+y$Resp_cancer_death <- ifelse(grepl("C32|C33|C34", y$Underlying..primary..cause.of.death..ICD10...Instance.0),1,0)
+y$Lung_cancer_death <- ifelse(grepl("C33|C34", y$Underlying..primary..cause.of.death..ICD10...Instance.0),1,0)
+y$Resp_death <- ifelse(grepl("J0|J1|J2|J3|J4|J5|J6|J7|J8|J9", y$Underlying..primary..cause.of.death..ICD10...Instance.0),1,0)
+
+#sample1：ACC--------------------------
+y <- subset(y,y$Data.quality..good.wear.time!="") # 103661 start  #103668 start
+table(y$Data.quality..good.wear.time,exclude = NULL)
+y <- subset(y,y$Data.quality..good.wear.time=="Yes") # -6992
+table(y$Data.quality..good.calibration,exclude = NULL)
+y <- subset(y,y$Data.quality..good.calibration=="Yes") # -4
+y <- subset(y,y$Moderate.Vigorous...Overall.average...Instance.0!="") # -1
+
+sum(y$Moderate.Vigorous...Day.average...Instance.0=="")
+sum(y$Moderate.Vigorous...Overall.average...Instance.0=="")
+
+#View(y[, c("Participant.ID","Moderate.Vigorous...Day.average...Instance.0","Moderate.Vigorous...Overall.average...Instance.0")])
+#y <- subset(y,y$Moderate.Vigorous...Day.average...Instance.0!="") # -1160
+
+#Covariates----------------------------
+table(y$UK.Biobank.assessment.centre...Instance.0,exclude = NULL)
+# Recode(y$UK.Biobank.assessment.centre...Instance.0)
+y$centre <- Recode(y$UK.Biobank.assessment.centre...Instance.0,
+	"Manchester::English", 
+	"Croydon::English", 
+	"Reading::English", 
+	"Newcastle::English", 
+	"Oxford::English", 
+	"Nottingham::English", 
+	"Hounslow::English", 
+	"Barts::English", 
+	"Bury::English", 
+	"Birmingham::English", 
+	"Middlesborough::English", 
+	"Sheffield::English", 
+	"Stoke::English", 
+	"Edinburgh::Scotland", 
+	"Leeds::English", 
+	"Liverpool::English", 
+	"Cardiff::Wales", 
+	"Stockport (pilot)::English", 
+	"Bristol::English", 
+	"Wrexham::Wales", 
+	"Glasgow::Scotland", 
+	"Swansea::Wales",
+	to.numeric = FALSE)
+table(y$centre,exclude = NULL)
+
+y$date_assess <- as.Date(y$Date.of.attending.assessment.centre...Instance.0)
+
+y$diff_time_PA_assess <- difftime(y$date_in,y$date_assess,units = c("auto"))
+y$diff_time_PA_assess <- as.numeric(y$diff_time_PA_assess, units = "days") # 日期转换成数值
+y$age <- y$diff_time_PA_assess/365 + y$Age.at.recruitment
+summary(y$age)
+y$sex <- y$Sex
+table(y$sex,exclude = NULL)
+
+y$race <- y$Ethnic.background...Instance.0
+table(y$race,exclude = NULL)
+y$white <- ifelse(y$race=="British"|y$race=="Any other white background"|
+                    y$race=="Irish"|y$race=="White",1,0)
+y$white[y$race=="Prefer not to answer"|y$race==""] <- NA
+table(y$white,exclude = NULL)
+
+table(y$Qualifications...Instance.1,exclude = NULL)
+y$edu <- y$Qualifications...Instance.0
+table(y$edu,exclude = NULL)
+sum(grepl("College", y$edu))
+sum(grepl("Univer", x$Qualifications...Instance.0))
+y$college0 <- ifelse(grepl("College", y$Qualifications...Instance.0),1,0)
+y$college1 <- ifelse(grepl("College", y$Qualifications...Instance.1),1,0)
+y$college0[y$Qualifications...Instance.0=="Prefer not to answer"|y$Qualifications...Instance.0==""] <- NA
+y$college1[y$Qualifications...Instance.1=="Prefer not to answer"|y$Qualifications...Instance.1==""] <- NA
+table(y$college0,exclude = NULL)
+table(y$college1,exclude = NULL)
+y$college <- ifelse(is.na(y$college1)==T,y$college0,y$college1)
+table(y$college,exclude = NULL)
+#View(y[, c("Participant.ID","college0","college1","college")])
+
+y$employment0 <- ifelse(grepl("paid employment",y$Current.employment.status...Instance.0),1,0)
+y$employment0[y$Current.employment.status...Instance.0=="Prefer not to answer"|y$Current.employment.status...Instance.0==""] <- NA
+y$employment1 <- ifelse(grepl("paid employment",y$Current.employment.status...Instance.1),1,0)
+y$employment1[y$Current.employment.status...Instance.1=="Prefer not to answer"|y$Current.employment.status...Instance.1==""] <- NA
+
+y$employment <- ifelse(is.na(y$employment1)==T,y$employment0,y$employment1)
+table(y$employment,exclude = NULL)
+
+y$smoke0 <- y$Smoking.status...Instance.0
+y$smoke1 <- y$Smoking.status...Instance.1
+
+table(y$smoke1,exclude = NULL)
+# Recode(y$smoke)
+y$smoke0 <- Recode(y$smoke0,
+	"Previous::", 
+	"Never::", 
+	"Current::", 
+	"Prefer not to answer::NA", 
+	"::NA",
+	to.numeric = FALSE)
+y$smoke1 <- Recode(y$smoke1,
+                   "Previous::", 
+                   "Never::", 
+                   "Current::", 
+                   "Prefer not to answer::NA", 
+                   "::NA",
+                   to.numeric = FALSE)
+y$smoke <- ifelse(is.na(y$smoke1)==T,y$smoke0,y$smoke1)
+y$smoke <- factor(y$smoke, levels = c("Never","Previous","Current"))
+table(y$smoke,exclude = NULL)
+
+table(y$Alcohol.drinker.status...Instance.0.x)
+y$drinker0 <- y$Alcohol.drinker.status...Instance.0.x
+y$drinker1 <- y$Alcohol.drinker.status...Instance.1.x
+table(y$drinker1,exclude = NULL)
+# Recode(y$drinker0)
+y$drinker0 <- Recode(y$drinker0,
+	"Current::", 
+	"Never::", 
+	"Previous::", 
+	"Prefer not to answer::NA", 
+	"::NA",
+	to.numeric = FALSE)
+
+# Recode(y$drinker1)
+y$drinker1 <- Recode(y$drinker1,
+	"::NA", 
+	"Current::", 
+	"Never::", 
+	"Previous::", 
+	"Prefer not to answer::NA",
+	to.numeric = FALSE)
+
+y$drinker <- ifelse(is.na(y$drinker1)==T,y$drinker0,y$drinker1)
+table(y$drinker,exclude = NULL)
+y$drinker <- factor(y$drinker, levels = c("Never","Previous",
+                                          "Current"))
+table(y$drinker,exclude = NULL)
+
+y$BMI0 <- y$Body.mass.index..BMI....Instance.0
+y$BMI1 <- y$Body.mass.index..BMI....Instance.1
+y$BMI <- ifelse(is.na(y$BMI1)==T,y$BMI0,y$BMI1)
+summary(y$BMI)
+
+y$waist0 <- y$Waist.circumference...Instance.0
+y$waist1 <- y$Waist.circumference...Instance.1
+y$waist <- ifelse(is.na(y$waist1)==T,y$waist0,y$waist1)
+summary(y$waist)
+
+table(y$Average.total.household.income.before.tax...Instance.0,exclude = NULL)
+# Recode(y$Average.total.household.income.before.tax...Instance.0)
+y$income0 <- Recode(y$Average.total.household.income.before.tax...Instance.0,
+	"31,000 to 51,999::2-18,000 to 51,999", 
+	"52,000 to 100,000::3-52,000 to 100,000", 
+	"18,000 to 30,999::2-18,000 to 51,999", 
+	"Greater than 100,000::4-Greater than 100,000", 
+	"Prefer not to answer::5-NA", 
+	"Less than 18,000::1-Less than 18,000", 
+	"Do not know::5-NA", 
+	"::5-NA",
+	to.numeric = FALSE)
+y$income1 <- Recode(y$Average.total.household.income.before.tax...Instance.1,
+                   "31,000 to 51,999::2-18,000 to 51,999", 
+                   "52,000 to 100,000::3-52,000 to 100,000", 
+                   "18,000 to 30,999::2-18,000 to 51,999", 
+                   "Greater than 100,000::4-Greater than 100,000", 
+                   "Prefer not to answer::5-NA", 
+                   "Less than 18,000::1-Less than 18,000", 
+                   "Do not know::5-NA", 
+                   "::5-NA",
+                   to.numeric = FALSE)
+table(y$income0,exclude = NULL)
+y$income <- ifelse(y$income1=="5-NA",y$income0,y$income1)
+table(y$income,exclude = NULL)
+
+#TDI----------------
+y$TDI <- y$Townsend.deprivation.index.at.recruitment
+
+##Hypertension--------------
+sum(y$Date.I15.first.reported..secondary.hypertension.=="")
+sum(y$Date.I10.first.reported..essential..primary..hypertension.=="")
+sum(y$Date.I11.first.reported..hypertensive.heart.disease.  =="")
+sum(y$Date.I12.first.reported..hypertensive.renal.disease.  =="")
+sum(y$Date.I13.first.reported..hypertensive.heart.and.renal.disease. =="")
+
+y$Hyp_date1 <- as.Date(y$Date.I10.first.reported..essential..primary..hypertension.)
+y$Hyp_date2 <- as.Date(y$Date.I11.first.reported..hypertensive.heart.disease.)
+y$Hyp_date3 <- as.Date(y$Date.I12.first.reported..hypertensive.renal.disease.)
+y$Hyp_date4 <- as.Date(y$Date.I13.first.reported..hypertensive.heart.and.renal.disease.)
+y$Hyp_date5 <- as.Date(y$Date.I15.first.reported..secondary.hypertension.)
+
+y$Hyp_date <- apply(y[, c("Hyp_date1", "Hyp_date2", "Hyp_date3", "Hyp_date4", "Hyp_date5")], 1, function(x) min(x, na.rm = TRUE))
+
+y$Hypertension <-0
+y$Hypertension[y$Hyp_date <= y$date_in] <-1
+table(y$Hypertension,exclude = NULL)
+
+View(y[,c("Hyp_date1","Hyp_date2", 
+              "Hyp_date3","Hyp_date4", 
+              "Hyp_date5","Hyp_date","date_in","Hypertension")])
+
+
+##Hyperlipidemia--------------
+sum(y$Date.E78.first.reported..disorders.of.lipoprotein.metabolism.and.other.lipidaemias.!="",na.rm = T)
+y$Lipidemia_date <- as.Date(y$Date.E78.first.reported..disorders.of.lipoprotein.metabolism.and.other.lipidaemias.)
+sum(y$Lipidemia_date <= y$date_in,na.rm = T)
+y$Dislipidemia <-0
+y$Dislipidemia[y$Lipidemia_date <= y$date_in] <-1
+table(y$Dislipidemia,exclude = NULL)
+
+##Diabetes----------------
+#y$DM_E14 <- as.Date(y$Date.E14.first.reported..unspecified.diabetes.mellitus.)
+#y$DM_E13 <- as.Date(y$Date.E13.first.reported..other.specified.diabetes.mellitus.)
+#y$DM_E12 <- as.Date(y$Date.E12.first.reported..malnutrition.related.diabetes.mellitus.)
+y$DM_E11 <- as.Date(y$Date.E11.first.reported..non.insulin.dependent.diabetes.mellitus.) 
+#y$DM_E10 <- as.Date(y$Date.E10.first.reported..insulin.dependent.diabetes.mellitus.)
+
+#y$DM_time <- pmin(y$DM_E14,y$DM_E13,y$DM_E12,y$DM_E11,y$DM_E10,na.rm = T)
+
+sum(y$DM_E11 <= y$date_in,na.rm = T)
+y$DM_history <- 0
+y$DM_history[y$DM_E11 <= y$date_in] <-1
+table(y$DM_history,exclude = NULL)
+
+##myocardial infarction--------------------------------
+y$Date.I21.first.reported..acute.myocardial.infarction. <- as.Date(y$Date.I21.first.reported..acute.myocardial.infarction.)
+y$Date.I22.first.reported..subsequent.myocardial.infarction. <- as.Date(y$Date.I22.first.reported..subsequent.myocardial.infarction.)
+sum(is.na(y$Date.I21.first.reported..acute.myocardial.infarction.)!=T)
+y$MI <- 0
+y$MI[is.na(y$Date.I21.first.reported..acute.myocardial.infarction.)!=T|is.na(y$Date.I22.first.reported..subsequent.myocardial.infarction.)!=T] <- 1
+table(y$MI)
+
+y$MI21_time <- difftime(y$Date.I21.first.reported..acute.myocardial.infarction., y$date_in, units = c("auto"))
+y$MI22_time <- difftime(y$Date.I22.first.reported..subsequent.myocardial.infarction., y$date_in, units = c("auto"))
+
+y$MI21_time <- as.numeric(y$MI21_time, units = "days")
+y$MI22_time <- as.numeric(y$MI22_time, units = "days")
+
+y$MI_time <- pmin(y$MI22_time,y$MI21_time,na.rm = T)
+summary(y$MI_time)
+sum(y$MI_time<0,na.rm=T)
+y$MI_time[is.na(y$MI_time)==T] <- y$follow_time[is.na(y$MI_time)==T]
+
+y$MI_history <- y$MI
+y$MI_history[y$MI_time>0] <- 0
+table(y$MI_history)
+
+##stroke------------------
+y$stroke <- 0
+y$stroke[y$Date.I60.first.reported..subarachnoid.haemorrhage.!=""|
+            y$Date.I61.first.reported..intracerebral.haemorrhage.!=""|
+            y$Date.I63.first.reported..cerebral.infarction.!=""|
+            y$Date.I64.first.reported..stroke..not.specified.as.haemorrhage.or.infarction.!=""] <- 1
+table(y$stroke)
+
+y$stroke_time60 <- as.Date(y$Date.I60.first.reported..subarachnoid.haemorrhage.)
+y$stroke_time61 <- as.Date(y$Date.I61.first.reported..intracerebral.haemorrhage.)
+y$stroke_time63 <- as.Date(y$Date.I63.first.reported..cerebral.infarction.)
+y$stroke_time64 <- as.Date(y$Date.I64.first.reported..stroke..not.specified.as.haemorrhage.or.infarction.)
+
+y$stroke_time60 <- difftime(y$stroke_time60, y$date_in, units = c("auto"))
+y$stroke_time61 <- difftime(y$stroke_time61, y$date_in, units = c("auto"))
+y$stroke_time63 <- difftime(y$stroke_time63, y$date_in, units = c("auto"))
+y$stroke_time64 <- difftime(y$stroke_time64, y$date_in, units = c("auto"))
+
+y$stroke_time <- pmin(y$stroke_time60,y$stroke_time61,y$stroke_time63,y$stroke_time64,na.rm = T)
+summary(y$stroke_time)
+y$stroke_time <- as.numeric(y$stroke_time, units = "days")
+summary(y$stroke_time)
+y$stroke_time <- y$stroke_time/365
+sum(is.na(y$stroke_time)==F)
+
+y$stroke_time <- ifelse(is.na(y$stroke_time)==T,y$follow_time,y$stroke_time)
+summary(y$stroke_time)
+y$stroke_history <- y$stroke
+y$stroke_history[y$stroke_time>0] <- 0
+table(y$stroke_history)
+
+##Cancer--------------------
+summary(y$cancer_date)
+y$cancer <- 0
+y$cancer[y$cancer_date <= y$date_in] <- 1
+table(y$cancer)
+
+##smoke and fuel-----------------
+table(y$Exposure.to.tobacco.smoke.at.home...Instance.0)
+table(y$Exposure.to.tobacco.smoke.at.home...Instance.1)
+table(y$Exposure.to.tobacco.smoke.outside.home...Instance.0)
+
+y$exposure_tobacco_home_0 <- as.numeric(y$Exposure.to.tobacco.smoke.at.home...Instance.0)
+y$exposure_tobacco_outside_0 <- as.numeric(y$Exposure.to.tobacco.smoke.outside.home...Instance.0)
+y$exposure_tobacco_home_1 <- as.numeric(y$Exposure.to.tobacco.smoke.at.home...Instance.1)
+y$exposure_tobacco_outside_1 <- as.numeric(y$Exposure.to.tobacco.smoke.outside.home...Instance.1)
+
+
+table(y$Current.tobacco.smoking...Instance.0,exclude = NULL)
+table(y$Current.tobacco.smoking...Instance.1,exclude = NULL)
+
+y$exposure_tobacco_home_0[y$Current.tobacco.smoking...Instance.0=="Yes, on most or all days"] <- 168
+y$exposure_tobacco_outside_0[y$Current.tobacco.smoking...Instance.0=="Yes, on most or all days"] <- 168
+y$exposure_tobacco_home_1[y$Current.tobacco.smoking...Instance.1=="Yes, on most or all days"] <- 168
+y$exposure_tobacco_outside_1[y$Current.tobacco.smoking...Instance.1=="Yes, on most or all days"] <- 168
+
+summary(y$exposure_tobacco_home_0)
+summary(y$exposure_tobacco_home_1)
+y$exposure_tobacco_home <- ifelse(is.na(y$exposure_tobacco_home_1)==T,y$exposure_tobacco_home_0,y$exposure_tobacco_home_1)
+summary(y$exposure_tobacco_home)
+
+summary(y$exposure_tobacco_outside_0)
+summary(y$exposure_tobacco_outside_1)
+y$exposure_tobacco_outside <- ifelse(is.na(y$exposure_tobacco_outside_1)==T,y$exposure_tobacco_outside_0,y$exposure_tobacco_outside_1)
+summary(y$exposure_tobacco_outside)
+
+table(y$Gas.or.solid.fuel.cooking.heating...Instance.0)
+table(y$Gas.or.solid.fuel.cooking.heating...Instance.1)
+
+# Recode(y$Gas.or.solid.fuel.cooking.heating...Instance.0)
+y$solid_fuel_0 <- Recode(y$Gas.or.solid.fuel.cooking.heating...Instance.0,
+                       "None of the above::0", 
+                       "A gas hob or gas cooker::0", 
+                       "A gas hob or gas cooker|A gas fire that you use regularly in winter time::0", 
+                       "A gas fire that you use regularly in winter time::0", 
+                       "::NA", 
+                       "A gas hob or gas cooker|An open solid fuel fire that you use regularly in winter time::1", 
+                       "A gas hob or gas cooker|A gas fire that you use regularly in winter time|An open solid fuel fire that you use regularly in winter time::1", 
+                       "An open solid fuel fire that you use regularly in winter time::1", 
+                       "Prefer not to answer::NA", 
+                       "A gas fire that you use regularly in winter time|An open solid fuel fire that you use regularly in winter time::1", 
+                       "Do not know::NA", 
+                       "NA::",
+                       to.numeric = FALSE)
+y$solid_fuel_1 <- Recode(y$Gas.or.solid.fuel.cooking.heating...Instance.1,
+                         "None of the above::0", 
+                         "A gas hob or gas cooker::0", 
+                         "A gas hob or gas cooker|A gas fire that you use regularly in winter time::0", 
+                         "A gas fire that you use regularly in winter time::0", 
+                         "::NA", 
+                         "A gas hob or gas cooker|An open solid fuel fire that you use regularly in winter time::1", 
+                         "A gas hob or gas cooker|A gas fire that you use regularly in winter time|An open solid fuel fire that you use regularly in winter time::1", 
+                         "An open solid fuel fire that you use regularly in winter time::1", 
+                         "Prefer not to answer::NA", 
+                         "A gas fire that you use regularly in winter time|An open solid fuel fire that you use regularly in winter time::1", 
+                         "Do not know::NA", 
+                         "NA::",
+                         to.numeric = FALSE)
+
+table(y$solid_fuel_1,exclude = NULL)
+y$solid_fuel <- ifelse(is.na(y$solid_fuel_1)==T,y$solid_fuel_0,y$solid_fuel_1)
+table(y$Gas.or.solid.fuel.cooking.heating..pilot....Instance.0[is.na(y$solid_fuel)==T])
+# Recode(y$Gas.or.solid.fuel.cooking.heating..pilot....Instance.0)
+y$Gas.or.solid.fuel.cooking.heating..pilot....Instance.0 <- Recode(y$Gas.or.solid.fuel.cooking.heating..pilot....Instance.0,
+                                                                   "::NA", 
+                                                                   "None of the above::0", 
+                                                                   "A gas hob::0", 
+                                                                   "A gas cooker::0", 
+                                                                   "A gas hob|A gas cooker::0", 
+                                                                   "A gas hob|An open solid fuel fire that you use regularly in winter time::1", 
+                                                                   "An open solid fuel fire that you use regularly in winter time::1", 
+                                                                   "A gas cooker|An open solid fuel fire that you use regularly in winter time::1", 
+                                                                   "A gas hob|A gas cooker|An open solid fuel fire that you use regularly in winter time::1", 
+                                                                   "Prefer not to answer::NA", 
+                                                                   "Do not know::NA", 
+                                                                   "NA::NA",
+                                                                   to.numeric = FALSE)
+table(y$Gas.or.solid.fuel.cooking.heating..pilot....Instance.0)
+table(y$Gas.or.solid.fuel.cooking.heating..pilot....Instance.0[is.na(y$solid_fuel)==T])
+y$solid_fuel[is.na(y$solid_fuel)==T] <- y$Gas.or.solid.fuel.cooking.heating..pilot....Instance.0[is.na(y$solid_fuel)==T]
+table(y$solid_fuel,exclude = NULL)
+
+#save------------------------
+y1 <- y
+summary(y1$follow_time)
+
+#sample-------------
+sum(is.na(y1$pm25_mean)==T)
+y1 <- subset(y1, is.na(y1$pm25_mean)!=T) #-29
+sum(is.na(y1$no2_mean)==T)
+sum(is.na(y1$nox_mean)==T)
+sum(is.na(y1$pm10_mean)==T)
+summary(y1$pm10_mean)
+
+sum(y1$Date.lost.to.follow.up!="")
+y1 <- subset(y1, Date.lost.to.follow.up=="") #-13
+
+y1 <- subset(y1, cancer==0 & MI_history==0 & stroke_history ==0) #-16664
+
+##Covariate----------------------------
+sum(is.na(y1$age)==T |is.na(y1$sex)==T |is.na(y1$white)==T |is.na(y1$college)==T |is.na(y1$smoke)==T 
+    |is.na(y1$drinker)==T |is.na(y1$BMI)==T |is.na(y1$TDI)==T | is.na(y1$solid_fuel)==T|
+      is.na(y1$Hypertension)==T |is.na(y1$DM_history)==T |
+      is.na(y1$Dislipidemia)==T |
+      is.na(y1$exposure_tobacco_home)==T|is.na(y1$pm25_mean)==T) #2081
+colSums(is.na(y1[, c("age", "sex", "white", "college", "smoke", "drinker", "BMI", "TDI", "solid_fuel", 
+                     "Hypertension", "DM_history", "Dislipidemia", "exposure_tobacco_outside", 
+                    "exposure_tobacco_home", "pm25_mean")]))
+summary(y1$pm25_mean)
+
+y1 <- y1[complete.cases(y1[, c("age", "sex", "white", "college", "smoke", "drinker", "BMI", "TDI", 
+                            "solid_fuel","Hypertension", "DM_history", "Dislipidemia", 
+                            "exposure_tobacco_home")]), ] 
+
+
+##PA from accelerator----------------------
+y1$MVPA_week_sum <- y1$Moderate.Vigorous...Overall.average...Instance.0*24*60*7
+summary(y1$MVPA_week_sum)
+y1$MVPA_week_sum_150 <- ifelse(y1$MVPA_week_sum>=150,1,0)
+y1$MVPA_week_sum_300 <- ifelse(y1$MVPA_week_sum>=300,1,0)
+IQR(y1$MVPA_week_sum, na.rm = TRUE)
+sd(y1$MVPA_week_sum, na.rm = TRUE)
+
+y1$MVPA_week_sum_50 <- y1$MVPA_week_sum/50
+y1$MVPA_week_sum_100 <- y1$MVPA_week_sum/100
+
+##categorical variable-----------------
+y1$MVPA_week_sum_5 <- as.factor(cut_number(y1$MVPA_week_sum,5))
+# Recode(y1$MVPA_week_sum_5)
+y1$MVPA_week_sum_5 <- Recode(y1$MVPA_week_sum_5,
+	"[0,91]::1", 
+	"(91,182]::2", 
+	"(182,289]::3", 
+	"(289,454]::4", 
+	"(454,3e+03]::5",
+	to.numeric = T)
+
+y1$MVPA_week_sum_4 <- as.factor(cut_number(y1$MVPA_week_sum,4))
+# Recode(y1$MVPA_week_sum_4)
+y1$MVPA_week_sum_4 <- Recode(y1$MVPA_week_sum_4,
+	"[0,113]::1", 
+	"(113,232]::2", 
+	"(232,402]::3", 
+	"(402,3e+03]::4",
+	to.numeric = FALSE)
+
+y1$MVPA_week_sum_6 <- as.factor(cut_number(y1$MVPA_week_sum,6))
+# Recode(y1$MVPA_week_sum_6)
+y1$MVPA_week_sum_6 <- Recode(y1$MVPA_week_sum_6,
+	"[0,75.5]::1", 
+	"(75.5,151]::2", 
+	"(151,232]::3", 
+	"(232,334]::4", 
+	"(334,496]::5", 
+	"(496,3e+03]::6",
+	to.numeric = FALSE)
+summary(y1$MVPA_week_sum_5)
+#AP----------------
+y1 <- merge(y1, NO2, by = "Participant.ID", all.x = TRUE)
+y1 <- merge(y1, NOx, by = "Participant.ID", all.x = TRUE)
+y1 <- merge(y1, PM10, by = "Participant.ID", all.x = TRUE)
+
+summary(y1$pm25_mean)
+summary(y1$pm10_mean)
+summary(y1$no2_mean)
+summary(y1$nox_mean)
+
+IQR(y1$pm25_mean, na.rm = TRUE)
+sd(y1$pm25_mean, na.rm = TRUE)
+y1$pm25_IQR <- y1$pm25_mean/2.14
+y1$pm25_sd <- y1$pm25_mean/1.64
+
+IQR(y1$pm10_mean, na.rm = TRUE)
+sd(y1$pm10_mean, na.rm = TRUE)
+y1$pm10_IQR <- y1$pm10_mean/3.17
+y1$pm10_sd <- y1$pm10_mean/2.52
+
+IQR(y1$no2_mean, na.rm = TRUE)
+sd(y1$no2_mean, na.rm = TRUE)
+y1$no2_IQR <- y1$no2_mean/7.18
+y1$no2_sd <- y1$no2_mean/6.04
+
+IQR(y1$nox_mean, na.rm = TRUE)
+sd(y1$nox_mean, na.rm = TRUE)
+y1$nox_IQR <- y1$nox_mean/12.08
+y1$nox_sd <- y1$nox_mean/10.93
+
+
+y1$pm25_2 <- as.factor(cut_number(y1$pm25_mean,2))
+# Recode(y1$pm25_2)
+y1$pm25_2 <- Recode(y1$pm25_2,
+	"[0,9.36]::0", 
+	"(9.36,16.9]::1",
+	to.numeric = FALSE)
+
+
+y1$pm25_3 <- as.factor(cut_number(y1$pm25_mean,3))
+# Recode(y1$pm25_3)
+y1$pm25_3 <- Recode(y1$pm25_3,
+	"[0,8.63]::1", 
+	"(8.63,10]::2", 
+	"(10,16.9]::3",
+	to.numeric = FALSE)
+
+
+y1$pm25_4 <- as.factor(cut_number(y1$pm25_mean,4))
+# Recode(y1$pm25_4)
+y1$pm25_4 <- Recode(y1$pm25_4,
+	"[0,8.23]::1", 
+	"(8.23,9.36]::2", 
+	"(9.36,10.4]::3", 
+	"(10.4,16.9]::4",
+	to.numeric = FALSE)
+
+#SAVE----------------
+ys <- y1
+#y1 <- ys
+summary(as.Date(y1$Start.time.of.wear))
